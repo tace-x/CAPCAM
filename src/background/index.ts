@@ -4,7 +4,8 @@ import { createChromeOffscreenPlatform, OffscreenManager } from "./offscreen-man
 import { SettingsStorage } from "../storage/storage";
 import { CapCamError, toCapCamError } from "../shared/errors";
 import { createLogger } from "../shared/logger";
-import { createErrorResponse, extractRequestId } from "../messaging/protocol";
+import { createErrorResponse, extractRequestId, isEventEnvelope } from "../messaging/protocol";
+import { isTrustedOffscreenEvent } from "./event-relay";
 import { generateRequestId } from "../messaging/commands";
 
 const logger = createLogger("Runtime");
@@ -16,6 +17,14 @@ const runtime = new BackgroundRuntime(
 const messageRouter = new BackgroundMessageRouter(runtime, extensionId, chrome.runtime.getURL(""));
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (isEventEnvelope(message)) {
+    if (isTrustedOffscreenEvent(message, sender, extensionId, chrome.runtime.getURL("public/offscreen.html"))) {
+      void chrome.runtime.sendMessage(message).catch((error: unknown) => {
+        logger.warn("An offscreen event could not be relayed to extension UI contexts.", { code: toCapCamError(error).code });
+      });
+    }
+    return false;
+  }
   void messageRouter.handle(message, sender).then(sendResponse).catch((error: unknown) => {
     const failure = toCapCamError(error);
     logger.error("Unexpected message listener failure.", { code: failure.code });

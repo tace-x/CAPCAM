@@ -15,10 +15,10 @@ export class OffscreenRuntime {
     if (this.info.status === "READY") return Promise.resolve(this.getStatus());
     if (this.initialization !== null) return this.initialization;
 
-    this.initialization = Promise.resolve().then(() => {
+    this.initialization = Promise.resolve().then(async () => {
       try {
         this.info = { status: "STARTING", initializedAt: null };
-        this.mediaRuntime.initialize();
+        await this.mediaRuntime.initialize();
         this.info = { status: "READY", initializedAt: Date.now() };
         logger.info("Offscreen runtime ready.");
         return this.getStatus();
@@ -39,7 +39,7 @@ export class OffscreenRuntime {
 
   async shutdown(): Promise<OffscreenRuntimeInfo> {
     try {
-      this.mediaRuntime.shutdown();
+      await this.mediaRuntime.shutdown();
       this.info = { status: "STOPPED", initializedAt: null };
       logger.info("Offscreen runtime stopped.");
       return this.getStatus();

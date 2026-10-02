@@ -3,6 +3,7 @@ import { createInitialCapCamState } from "../shared/state";
 import { createLogger } from "../shared/logger";
 import type { CapCamState, OffscreenRuntimeInfo } from "../shared/types";
 import type { CapCamSettings } from "../storage/settings";
+import type { MediaClearResult, MediaIdPayload, MediaRecord, MediaRegisterPayload } from "../media/media-types";
 import type { OffscreenService } from "./offscreen-manager";
 
 export interface SettingsService {
@@ -71,6 +72,30 @@ export class BackgroundRuntime {
     const status = await this.offscreen.shutdown();
     this.applyOffscreenInfo(status);
     return { ...status };
+  }
+
+  registerMedia(payload: MediaRegisterPayload): Promise<MediaRecord> {
+    return this.offscreen.execute("media.register", payload);
+  }
+
+  getMedia(payload: MediaIdPayload): Promise<MediaRecord> {
+    return this.offscreen.execute("media.get", payload);
+  }
+
+  listMedia(): Promise<MediaRecord[]> {
+    return this.offscreen.execute("media.list");
+  }
+
+  removeMedia(payload: MediaIdPayload): Promise<MediaRecord> {
+    return this.offscreen.execute("media.remove", payload);
+  }
+
+  clearMedia(): Promise<MediaClearResult> {
+    return this.offscreen.execute("media.clear");
+  }
+
+  inspectMedia(payload: MediaIdPayload): Promise<MediaRecord> {
+    return this.offscreen.execute("media.inspect", payload);
   }
 
   async getSettings(): Promise<CapCamSettings> {

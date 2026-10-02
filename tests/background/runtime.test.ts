@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { OffscreenService } from "../../src/background/offscreen-manager";
+import type { MediaCommandType, OffscreenService } from "../../src/background/offscreen-manager";
+import type { CommandArguments, CommandResult } from "../../src/messaging/commands";
 import { BackgroundRuntime } from "../../src/background/runtime";
 import type { OffscreenRuntimeInfo } from "../../src/shared/types";
 import { DEFAULT_SETTINGS, type CapCamSettings } from "../../src/storage/settings";
@@ -21,6 +22,10 @@ class FakeOffscreenService implements OffscreenService {
   async shutdown(): Promise<OffscreenRuntimeInfo> {
     this.info = { status: "STOPPED", initializedAt: null };
     return { ...this.info };
+  }
+
+  async execute<T extends MediaCommandType>(_type: T, ..._args: CommandArguments<T>): Promise<CommandResult<T>> {
+    throw new Error("Unexpected media command in this runtime lifecycle test.");
   }
 }
 

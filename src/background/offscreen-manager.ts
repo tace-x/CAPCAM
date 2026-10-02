@@ -2,13 +2,16 @@ import { CapCamError, toCapCamError } from "../shared/errors";
 import { OFFSCREEN_DOCUMENT_PATH } from "../shared/constants";
 import { createLogger } from "../shared/logger";
 import type { OffscreenRuntimeInfo, OffscreenStatus } from "../shared/types";
-import { createCommand } from "../messaging/commands";
+import { createCommand, type CommandArguments, type CommandResult, type CommandType } from "../messaging/commands";
 import { isResponseData, isResponseEnvelope } from "../messaging/protocol";
+
+export type MediaCommandType = Extract<CommandType, `media.${string}`>;
 
 export interface OffscreenService {
   initialize(): Promise<OffscreenRuntimeInfo>;
   getStatus(): Promise<OffscreenRuntimeInfo>;
   shutdown(): Promise<OffscreenRuntimeInfo>;
+  execute<T extends MediaCommandType>(type: T, ...args: CommandArguments<T>): Promise<CommandResult<T>>;
 }
 
 export interface OffscreenPlatform {
@@ -27,7 +30,7 @@ export function createChromeOffscreenPlatform(): OffscreenPlatform {
       await chrome.offscreen.createDocument({
         url: OFFSCREEN_DOCUMENT_PATH,
         reasons: [chrome.offscreen.Reason.BLOBS],
-        justification: "Hosts the extension-owned local media runtime boundary; media processing is not enabled in Phase 01.",
+        justification: "Loads local user-selected Blob files by object URL in the isolated extension media runtime.",
       });
     },
     closeDocument: () => chrome.offscreen.closeDocument(),
@@ -92,6 +95,14 @@ export class OffscreenManager implements OffscreenService {
     });
   }
 
+  async execute<T extends MediaCommandType>(type: T, ...args: CommandArguments<T>): Promise<CommandResult<T>> {
+    const status = await this.initialize();
+    if (status.status !== "READY") {
+      throw new CapCamError("CAPCAM_RUNTIME_ERROR", "Offscreen media runtime is not ready.");
+    }
+    return this.exchange(type, ...args);
+  }
+
   private async initializeUnlocked(): Promise<OffscreenRuntimeInfo> {
     this.info = offscreenInfo("STARTING");
     let lastError: unknown;
@@ -128,8 +139,8 @@ export class OffscreenManager implements OffscreenService {
     }
   }
 
-  private async exchange(type: "offscreen.initialize" | "offscreen.getStatus" | "offscreen.shutdown"): Promise<OffscreenRuntimeInfo> {
-    const command = createCommand(type);
+  private async exchange<T extends CommandType>(type: T, ...args: CommandArguments<T>): Promise<CommandResult<T>> {
+    const command = createCommand(type, ...args);
     const response = await this.platform.sendMessage(command);
     if (!isResponseEnvelope(response)) {
       throw new CapCamError("CAPCAM_PROTOCOL_ERROR", "Offscreen runtime returned an invalid response envelope.");
@@ -146,9 +157,9 @@ export class OffscreenManager implements OffscreenService {
       );
     }
     if (!isResponseData(type, response.data)) {
-      throw new CapCamError("CAPCAM_PROTOCOL_ERROR", "Offscreen runtime returned an invalid status payload.");
+      throw new CapCamError("CAPCAM_PROTOCOL_ERROR", "Offscreen runtime returned an invalid command payload.", { type });
     }
-    return response.data as OffscreenRuntimeInfo;
+    return response.data as CommandResult<T>;
   }
 
   private async closeBestEffort(): Promise<void> {

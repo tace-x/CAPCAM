@@ -25,6 +25,12 @@ export class BackgroundMessageRouter {
     this.router.register("offscreen.shutdown", () => this.runtime.shutdown());
     this.router.register("settings.get", () => this.runtime.getSettings());
     this.router.register("settings.update", (payload: Partial<CapCamSettings>) => this.runtime.updateSettings(payload));
+    this.router.register("media.register", (payload) => this.runtime.registerMedia(payload));
+    this.router.register("media.get", (payload) => this.runtime.getMedia(payload));
+    this.router.register("media.list", () => this.runtime.listMedia());
+    this.router.register("media.remove", (payload) => this.runtime.removeMedia(payload));
+    this.router.register("media.clear", () => this.runtime.clearMedia());
+    this.router.register("media.inspect", (payload) => this.runtime.inspectMedia(payload));
   }
 
   async handle(message: unknown, sender: MessageSenderLike): Promise<ResponseEnvelope> {

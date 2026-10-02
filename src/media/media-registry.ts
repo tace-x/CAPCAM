@@ -1,48 +1,96 @@
-import { CapCamError } from "../shared/errors";
+import { MediaEngineError } from "./media-errors";
 import type { MediaSource } from "./media-source";
-import type { MediaMetadata } from "./media-types";
+import type { MediaRecord } from "./media-types";
+import { isMediaRecord } from "./media-validation";
 
-function isValidMetadata(metadata: MediaMetadata): boolean {
-  return (
-    typeof metadata.mediaId === "string" && metadata.mediaId.length > 0 &&
-    typeof metadata.name === "string" &&
-    (metadata.type === "image" || metadata.type === "video") &&
-    typeof metadata.mimeType === "string" &&
-    Number.isFinite(metadata.size) && metadata.size >= 0 &&
-    (metadata.duration === null || (Number.isFinite(metadata.duration) && metadata.duration >= 0)) &&
-    (metadata.width === null || (Number.isInteger(metadata.width) && metadata.width > 0)) &&
-    (metadata.height === null || (Number.isInteger(metadata.height) && metadata.height > 0)) &&
-    (metadata.aspectRatio === null || (Number.isFinite(metadata.aspectRatio) && metadata.aspectRatio > 0))
-  );
+interface MediaRegistryEntry {
+  record: MediaRecord;
+  source?: MediaSource;
+}
+
+function cloneRecord(record: MediaRecord): MediaRecord {
+  return {
+    ...record,
+    capabilities: { ...record.capabilities },
+    ...(record.error === undefined
+      ? {}
+      : { error: { ...record.error, ...(record.error.details === undefined ? {} : { details: { ...record.error.details } }) } }),
+  };
 }
 
 export class MediaRegistry {
-  private readonly sources = new Map<string, MediaSource>();
+  private readonly entries = new Map<string, MediaRegistryEntry>();
 
-  register(source: MediaSource): void {
-    if (!isValidMetadata(source.metadata) || source.kind !== source.metadata.type) {
-      throw new CapCamError("CAPCAM_MEDIA_ERROR", "Media source metadata is invalid.");
+  register(record: MediaRecord, source?: MediaSource): MediaRecord {
+    if (!isMediaRecord(record) || (source !== undefined && source.id !== record.id)) {
+      throw new MediaEngineError("MEDIA_INVALID_FILE", "Media registry entry is invalid.");
     }
-    const mediaId = source.metadata.mediaId;
-    if (this.sources.has(mediaId)) {
-      throw new CapCamError("CAPCAM_MEDIA_ERROR", "A media source with this ID is already registered.", { mediaId });
+    if (this.entries.has(record.id)) {
+      throw new MediaEngineError("MEDIA_INVALID_FILE", "A media item with this ID is already registered.", { mediaId: record.id });
     }
-    this.sources.set(mediaId, source);
+    const entry: MediaRegistryEntry = { record: cloneRecord(record) };
+    if (source !== undefined) entry.source = source;
+    this.entries.set(record.id, entry);
+    return cloneRecord(entry.record);
   }
 
-  get(mediaId: string): MediaSource | undefined {
-    return this.sources.get(mediaId);
+  update(record: MediaRecord): MediaRecord {
+    if (!isMediaRecord(record)) {
+      throw new MediaEngineError("MEDIA_INVALID_FILE", "Updated media record is invalid.");
+    }
+    const existing = this.entries.get(record.id);
+    if (existing === undefined) {
+      throw new MediaEngineError("MEDIA_NOT_FOUND", undefined, { mediaId: record.id });
+    }
+    existing.record = cloneRecord(record);
+    return cloneRecord(existing.record);
   }
 
-  listMetadata(): MediaMetadata[] {
-    return Array.from(this.sources.values(), ({ metadata }) => ({ ...metadata }));
+  attachSource(mediaId: string, source: MediaSource): void {
+    const existing = this.entries.get(mediaId);
+    if (existing === undefined) throw new MediaEngineError("MEDIA_NOT_FOUND", undefined, { mediaId });
+    if (source.id !== mediaId || source.kind !== existing.record.kind) {
+      throw new MediaEngineError("MEDIA_INVALID_FILE", "Media source does not match its registry record.", { mediaId });
+    }
+    existing.source = source;
   }
 
-  remove(mediaId: string): boolean {
-    return this.sources.delete(mediaId);
+  get(mediaId: string): MediaRecord | undefined {
+    const entry = this.entries.get(mediaId);
+    return entry === undefined ? undefined : cloneRecord(entry.record);
   }
 
-  clear(): void {
-    this.sources.clear();
+  getSource(mediaId: string): MediaSource | undefined {
+    return this.entries.get(mediaId)?.source;
+  }
+
+  detachSource(mediaId: string): void {
+    const entry = this.entries.get(mediaId);
+    if (entry !== undefined) delete entry.source;
+  }
+
+  list(): MediaRecord[] {
+    return Array.from(this.entries.values(), ({ record }) => cloneRecord(record));
+  }
+
+  remove(mediaId: string): MediaRecord | undefined {
+    const entry = this.entries.get(mediaId);
+    if (entry === undefined) return undefined;
+    this.entries.delete(mediaId);
+    return cloneRecord(entry.record);
+  }
+
+  clear(): MediaRecord[] {
+    const records = this.list();
+    this.entries.clear();
+    return records;
+  }
+
+  has(mediaId: string): boolean {
+    return this.entries.has(mediaId);
+  }
+
+  get size(): number {
+    return this.entries.size;
   }
 }

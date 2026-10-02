@@ -2,6 +2,7 @@ import { PROTOCOL_VERSION } from "../shared/constants";
 import { CapCamError, isCapCamErrorCode, toErrorDetail, type CapCamErrorCode } from "../shared/errors";
 import type { CapCamState, OffscreenRuntimeInfo, OffscreenStatus, RuntimeStatus, StreamStatus } from "../shared/types";
 import { isCapCamSettings, isSettingsPatch } from "../storage/settings";
+import { isMediaErrorInfo, isMediaId, isMediaRecord, isTransferId } from "../media/media-validation";
 import type { CommandEnvelope, CommandType } from "./commands";
 import type { EventEnvelope, EventType } from "./events";
 
@@ -34,11 +35,23 @@ const COMMAND_TYPES: readonly CommandType[] = [
   "offscreen.shutdown",
   "settings.get",
   "settings.update",
+  "media.register",
+  "media.get",
+  "media.list",
+  "media.remove",
+  "media.clear",
+  "media.inspect",
 ];
 const EVENT_TYPES: readonly EventType[] = [
   "runtime.stateChanged",
   "offscreen.statusChanged",
   "settings.changed",
+  "media.registered",
+  "media.loading",
+  "media.ready",
+  "media.failed",
+  "media.removed",
+  "media.released",
 ];
 
 export function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -86,19 +99,35 @@ export function validateCommand(value: unknown): CommandValidationResult {
   }
 
   const type = value.type as CommandType;
-  const allowedKeys = type === "settings.update"
+  const payloadCommands: readonly CommandType[] = [
+    "settings.update", "media.register", "media.get", "media.remove", "media.inspect",
+  ];
+  const allowedKeys = payloadCommands.includes(type)
     ? ["protocol", "requestId", "type", "payload"]
     : ["protocol", "requestId", "type"];
   if (Object.keys(value).some((key) => !allowedKeys.includes(key))) {
     return { ok: false, requestId, error: makeProtocolError("Command envelope contains unsupported fields.") };
   }
 
-  if (type === "settings.update") {
-    if (!Object.hasOwn(value, "payload") || !isSettingsPatch(value.payload)) {
-      return { ok: false, requestId, error: makeProtocolError("Settings payload is invalid.") };
-    }
-  } else if (Object.hasOwn(value, "payload") && value.payload !== undefined) {
-    return { ok: false, requestId, error: makeProtocolError("This command does not accept a payload.") };
+  const payload = value.payload;
+  let validPayload = true;
+  switch (type) {
+    case "settings.update":
+      validPayload = Object.hasOwn(value, "payload") && isSettingsPatch(payload);
+      break;
+    case "media.register":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 1 && isTransferId(payload.transferId);
+      break;
+    case "media.get":
+    case "media.remove":
+    case "media.inspect":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 1 && isMediaId(payload.mediaId);
+      break;
+    default:
+      validPayload = !Object.hasOwn(value, "payload");
+  }
+  if (!validPayload) {
+    return { ok: false, requestId, error: makeProtocolError("Command payload is invalid or unsupported.") };
   }
 
   return { ok: true, command: value as unknown as CommandEnvelope };
@@ -167,6 +196,16 @@ export function isResponseData(type: CommandType, value: unknown): boolean {
     case "settings.get":
     case "settings.update":
       return isCapCamSettings(value);
+    case "media.register":
+    case "media.get":
+    case "media.remove":
+    case "media.inspect":
+      return isMediaRecord(value);
+    case "media.list":
+      return Array.isArray(value) && value.every(isMediaRecord);
+    case "media.clear":
+      return isPlainRecord(value) && Object.keys(value).length === 1 &&
+        typeof value.removed === "number" && Number.isInteger(value.removed) && value.removed >= 0;
     default:
       return false;
   }
@@ -180,6 +219,24 @@ function isEventPayload(type: EventType, value: unknown): boolean {
       return isOffscreenRuntimeInfo(value);
     case "settings.changed":
       return isCapCamSettings(value);
+    case "media.registered":
+    case "media.loading":
+    case "media.ready":
+    case "media.released": {
+      if (!isPlainRecord(value) || !isMediaId(value.mediaId) || !isMediaRecord(value.record)) return false;
+      if (value.record.id !== value.mediaId) return false;
+      const expectedStatus = type === "media.registered" ? "NEW"
+        : type === "media.loading" ? "LOADING"
+        : type === "media.ready" ? "READY"
+        : "RELEASED";
+      return value.record.status === expectedStatus && Object.keys(value).length === 2;
+    }
+    case "media.failed":
+      return isPlainRecord(value) && isMediaId(value.mediaId) &&
+        isMediaRecord(value.record) && value.record.id === value.mediaId &&
+        value.record.status === "ERROR" && isMediaErrorInfo(value.error) && Object.keys(value).length === 3;
+    case "media.removed":
+      return isPlainRecord(value) && isMediaId(value.mediaId) && Object.keys(value).length === 1;
     default:
       return false;
   }

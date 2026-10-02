@@ -1,6 +1,7 @@
 import { PROTOCOL_VERSION } from "../shared/constants";
 import type { CapCamState, OffscreenRuntimeInfo } from "../shared/types";
 import type { CapCamSettings } from "../storage/settings";
+import type { MediaClearResult, MediaIdPayload, MediaRecord, MediaRegisterPayload } from "../media/media-types";
 
 export interface CommandMap {
   "runtime.getStatus": { payload: undefined; response: CapCamState };
@@ -9,6 +10,12 @@ export interface CommandMap {
   "offscreen.shutdown": { payload: undefined; response: OffscreenRuntimeInfo };
   "settings.get": { payload: undefined; response: CapCamSettings };
   "settings.update": { payload: Partial<CapCamSettings>; response: CapCamSettings };
+  "media.register": { payload: MediaRegisterPayload; response: MediaRecord };
+  "media.get": { payload: MediaIdPayload; response: MediaRecord };
+  "media.list": { payload: undefined; response: MediaRecord[] };
+  "media.remove": { payload: MediaIdPayload; response: MediaRecord };
+  "media.clear": { payload: undefined; response: MediaClearResult };
+  "media.inspect": { payload: MediaIdPayload; response: MediaRecord };
 }
 
 export type CommandType = keyof CommandMap;
