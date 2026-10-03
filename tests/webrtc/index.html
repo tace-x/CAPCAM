@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CapCam · Local WebRTC tests</title>
+  </head>
+  <body data-test-page="index">
+    <main class="shell">
+      <header class="masthead">
+        <a class="brand" href="./index.html">CAPCAM <span>PHASE 06</span></a>
+        <p class="eyebrow">LOCAL-ONLY · CONTROLLED TEST PAGES</p>
+      </header>
+      <section class="hero">
+        <p class="eyebrow">CAMERA REPLACEMENT FEASIBILITY</p>
+        <h1>WebRTC test bench</h1>
+        <p class="lede">These pages test native camera acquisition and application-controlled WebRTC track attachment separately. They do not change a website, intercept getUserMedia, or contact a video-chat service.</p>
+      </section>
+      <section class="card grid cards" aria-label="Test pages">
+        <a class="test-card" href="./basic-camera.html">
+          <span class="step">06.3A</span>
+          <h2>Native camera baseline</h2>
+          <p>Calls the page's unmodified <code>getUserMedia({ video: true })</code> after an explicit click. Shows the track the browser actually returns.</p>
+          <span class="link-label">Open test →</span>
+        </a>
+        <a class="test-card" href="./capcam-stream.html">
+          <span class="step">06.2</span>
+          <h2>CapCam-generated stream</h2>
+          <p>Runs the existing canvas capture pipeline in this page, displays its track, and probes native same-origin <code>postMessage</code> cloning to a real iframe.</p>
+          <span class="link-label">Open test →</span>
+        </a>
+        <a class="test-card" href="./loopback.html">
+          <span class="step">06.3B · addTrack</span>
+          <h2>Controlled WebRTC loopback</h2>
+          <p>Adds the page-owned generated video track to a local sender and displays the received track from a second local peer connection.</p>
+          <span class="link-label">Open test →</span>
+        </a>
+        <a class="test-card" href="./replace-track.html">
+          <span class="step">06.4 · replaceTrack</span>
+          <h2>Controlled sender replacement</h2>
+          <p>Starts with the native camera track, then explicitly calls <code>RTCRtpSender.replaceTrack()</code> with the generated canvas track.</p>
+          <span class="link-label">Open test →</span>
+        </a>
+        <a class="test-card" href="./offscreen-bridge.html">
+          <span class="step">06.2–06.4 · camera-test build</span>
+          <h2>Offscreen → real page boundary</h2>
+          <p>Uses a test-only BroadcastChannel to request the actual offscreen-owned stream, then posts it to a localhost page-world WebRTC consumer.</p>
+          <span class="link-label">Open test →</span>
+        </a>
+      </section>
+      <section class="notice">
+        <strong>Important boundary:</strong> these controlled pages own the generated MediaStream themselves. A successful page-to-page clone or local RTCPeerConnection test does <em>not</em> prove that the production offscreen document can deliver its MediaStream to an arbitrary website. The Chrome extension/page boundary requires its own verified mechanism.
+      </section>
+      <footer>Local media stays in the browser. No signaling server, STUN/TURN server, native driver, or remote video-chat site is used.</footer>
+    </main>
+    <script type="module" src="./test.ts"></script>
+  </body>
+</html>

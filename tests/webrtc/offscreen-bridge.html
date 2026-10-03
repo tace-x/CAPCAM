@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CapCam · Offscreen-to-page bridge experiment</title>
+  </head>
+  <body data-test-page="offscreen-bridge">
+    <main class="shell">
+      <header class="masthead"><a class="brand" href="./index.html">CAPCAM <span>PHASE 06</span></a><p class="eyebrow">06.2–06.4 · TEST-BUILD ONLY</p></header>
+      <section class="hero">
+        <p class="eyebrow">OFFSCREEN STREAM → EXTENSION PAGE → LOCAL WEB PAGE</p>
+        <h1>Boundary bridge experiment</h1>
+        <p class="lede">This isolated Chrome test page uses the existing typed runtime protocol for media ingestion and stream lifecycle. A separate, versioned BroadcastChannel probe—compiled only in <code>build:camera-test</code>—asks the offscreen document to structured-clone its actual active stream to this extension page. This page then uses native <code>window.postMessage</code> to send it to a localhost consumer tab.</p>
+      </section>
+      <section class="notice"><strong>Test-only:</strong> no website injection, content script, site adapter, permission bypass, or production bridge is installed. Load the camera-test build only when running this experiment. The normal <code>npm run build</code> excludes the offscreen BroadcastChannel listener.</section>
+      <section class="card controls form-row">
+        <label class="file-label">Select local media for the real offscreen pipeline<input id="offscreen-file" type="file" accept="image/*,video/*" /></label>
+        <button id="ingest-file" class="button" type="button" disabled>1 · Ingest into offscreen</button>
+        <button id="create-stream" class="button" type="button" disabled>2 · Create stream</button>
+        <button id="start-stream" class="button primary" type="button" disabled>3 · Start offscreen track</button>
+        <button id="restart-stream" class="button" type="button" disabled>Restart</button>
+        <button id="stop-stream" class="button" type="button" disabled>Stop</button>
+        <button id="dispose-stream" class="button danger" type="button" disabled>Dispose</button>
+        <span id="stream-status" class="status" role="status">Checking extension context…</span>
+      </section>
+      <section class="grid media-grid">
+        <article class="card">
+          <h2>Track received by extension test page</h2>
+          <video id="extension-preview" class="video" autoplay playsinline muted></video>
+          <pre id="track-info" class="output">No offscreen stream received.</pre>
+        </article>
+        <article class="card">
+          <h2>Serializable offscreen state</h2>
+          <pre id="offscreen-state" class="output">No stream state queried.</pre>
+          <button id="refresh-state" class="button" type="button">Refresh runtime state</button>
+        </article>
+      </section>
+      <section class="card">
+        <p class="eyebrow">LOCAL WEB PAGE CONTEXT</p>
+        <h2>Open a controlled localhost consumer</h2>
+        <div class="controls form-row">
+          <label class="file-label">Vite URL<input id="consumer-url" type="url" value="http://localhost:5173/tests/webrtc/web-consumer.html" /></label>
+          <button id="open-consumer" class="button" type="button">Open local consumer tab</button>
+          <button id="request-offscreen-stream" class="button primary" type="button" disabled>4 · Request offscreen MediaStream</button>
+          <span id="consumer-status" class="status" role="status">Consumer not opened</span>
+        </div>
+        <p class="caption">Open the consumer first, then request the active offscreen stream. It will display the actual received track and offer explicit native getUserMedia, addTrack, and replaceTrack controls. The consumer origin must be localhost.</p>
+      </section>
+      <section class="card"><h2>Event log</h2><pre id="log" class="output" aria-live="polite">No browser experiment has been run from this page.</pre></section>
+      <footer><a href="./index.html">← Test bench</a> · The BroadcastChannel bridge is absent from the normal production build.</footer>
+    </main>
+    <script type="module" src="./test.ts"></script>
+  </body>
+</html>

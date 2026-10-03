@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CapCam · Local web-page consumer</title>
+  </head>
+  <body data-test-page="web-consumer">
+    <main class="shell">
+      <header class="masthead"><span class="brand">LOCAL WEB CONSUMER <span>NOT AN EXTENSION PAGE</span></span><p class="eyebrow">CONTROLLED TEST ORIGIN · LOCALHOST</p></header>
+      <section class="hero">
+        <p class="eyebrow">REAL PAGE JAVASCRIPT CONTEXT</p>
+        <h1>WebRTC consumer</h1>
+        <p class="lede">This is a normal localhost page opened by the extension test harness. It independently verifies whether the page receives and displays the offscreen-generated track. Only after receipt can it attach that track to its own controlled RTCPeerConnection.</p>
+      </section>
+      <section class="notice"><strong>Transparent test:</strong> the page does not override getUserMedia. The camera is a distinct optional native baseline. The CapCam source arrives through an explicit test-only extension-page message, not through the native camera API.</section>
+      <section class="card controls form-row">
+        <button id="request-camera" class="button" type="button">Request native camera baseline</button>
+        <button id="start-camera-call" class="button" type="button" disabled>Start WebRTC with native camera</button>
+        <button id="start-offscreen-call" class="button" type="button" disabled>Add received CapCam track</button>
+        <button id="replace-offscreen-track" class="button primary" type="button" disabled>Replace sender with CapCam track</button>
+        <button id="restore-camera-track" class="button" type="button" disabled>Restore native camera track</button>
+        <button id="close-call" class="button danger" type="button" disabled>Close call and clean up</button>
+        <span id="consumer-status" class="status" role="status">Waiting for extension test page</span>
+      </section>
+      <section class="grid media-grid three-up">
+        <article class="card"><h2>Native camera · acquired here</h2><video id="camera-preview" class="video" autoplay playsinline muted></video><pre id="camera-track-info" class="output">Native getUserMedia not called.</pre></article>
+        <article class="card"><h2>CapCam track · received here</h2><video id="offscreen-preview" class="video" autoplay playsinline muted></video><pre id="offscreen-track-info" class="output">No cross-context MediaStream received.</pre></article>
+        <article class="card"><h2>Remote controlled WebRTC receiver</h2><video id="remote-preview" class="video" autoplay playsinline muted></video><pre id="remote-track-info" class="output">No remote track received.</pre><pre id="sender-info" class="output">No sender.</pre></article>
+      </section>
+      <section class="card"><h2>Page-world event log</h2><pre id="log" class="output" aria-live="polite">Waiting for the explicit local test message.</pre></section>
+      <footer>All WebRTC peers are local to this page. No production site, STUN/TURN service, or remote signaling server is involved.</footer>
+    </main>
+    <script type="module" src="./test.ts"></script>
+  </body>
+</html>

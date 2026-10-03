@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CapCam · replaceTrack controlled test</title>
+  </head>
+  <body data-test-page="replace-track">
+    <main class="shell">
+      <header class="masthead"><a class="brand" href="./index.html">CAPCAM <span>PHASE 06</span></a><p class="eyebrow">06.4 · CONTROLLED REPLACEMENT</p></header>
+      <section class="hero">
+        <p class="eyebrow">NATIVE CAMERA → EXPLICIT SENDER REPLACEMENT</p>
+        <h1>RTCRtpSender.replaceTrack()</h1>
+        <p class="lede">First acquire and display the browser's native camera track. Start a local two-peer WebRTC call using that track. Then load local media, generate a CapCam canvas track in this same page, and explicitly replace the sender track.</p>
+      </section>
+      <section class="notice"><strong>Permission note:</strong> Start the native camera only if you intend to grant this local test page camera access. This test does not change getUserMedia, hide the synthetic source, or contact a production service.</section>
+      <section class="card controls form-row">
+        <button id="request-camera" class="button primary" type="button">1 · Request native camera</button>
+        <button id="start-call" class="button" type="button" disabled>2 · Start local WebRTC call</button>
+        <label class="file-label">Choose local image or video<input id="source-file" type="file" accept="image/*,video/*" /></label>
+        <button id="start-capcam-stream" class="button" type="button" disabled>3 · Create CapCam stream</button>
+        <button id="replace-track" class="button primary" type="button" disabled>4 · Replace sender track</button>
+        <button id="restore-camera" class="button" type="button" disabled>Restore native track</button>
+        <button id="stop-test" class="button danger" type="button">Stop and clean up</button>
+        <span id="stream-status" class="status" role="status">Native camera not requested</span>
+      </section>
+      <section class="grid media-grid three-up">
+        <article class="card"><h2>Native camera · local</h2><video id="camera-preview" class="video" autoplay playsinline muted></video><pre id="camera-track-info" class="output">No native camera track.</pre></article>
+        <article class="card"><h2>CapCam-generated · local</h2><video id="capcam-preview" class="video" autoplay playsinline muted></video><pre id="track-info" class="output">No generated track.</pre></article>
+        <article class="card"><h2>Remote WebRTC receiver</h2><video id="remote-preview" class="video" autoplay playsinline muted></video><pre id="sender-info" class="output">No sender.</pre></article>
+      </section>
+      <section class="card"><h2>Event log</h2><pre id="log" class="output" aria-live="polite">The native camera call is not active.</pre></section>
+      <footer><a href="./index.html">← Test bench</a> · The camera stream remains distinct from the generated canvas stream.</footer>
+    </main>
+    <script type="module" src="./test.ts"></script>
+  </body>
+</html>
