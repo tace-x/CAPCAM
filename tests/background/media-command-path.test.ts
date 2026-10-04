@@ -204,4 +204,104 @@ describe("popup → service worker → offscreen media commands", () => {
     expect(malformed.success).toBe(false);
     if (!malformed.success) expect(malformed.error?.code).toBe("CAPCAM_PROTOCOL_ERROR");
   });
+
+  it("handles valid JPG ingestion and authorizes service worker sender with undefined url", async () => {
+    const transferStore = new MemoryTransferStore();
+    const imageResources = new FakeImageResources();
+    const urlApi = new FakeObjectUrlApi();
+    const events: EventEnvelope[] = [];
+    const engine = new MediaEngine({
+      transferStore,
+      imageResources,
+      objectUrls: new ObjectUrlManager(urlApi),
+      publishEvent: (event) => events.push(event),
+    });
+    const mediaRuntime = new MediaRuntime(engine);
+    const offscreenRuntime = new OffscreenRuntime(mediaRuntime);
+    const runtimeManager = offscreenRuntime.manager;
+    const offscreenRouter = new CommandRouter({
+      authorize: (command) => runtimeManager.authorizeCommand(command.type, command.runtimeSessionId),
+      getRuntimeSessionId: () => runtimeManager.getState().runtimeSessionId,
+    });
+    offscreenRouter.register("runtime.initialize", () => runtimeManager.initialize());
+    offscreenRouter.register("runtime.shutdown", () => runtimeManager.shutdown());
+    offscreenRouter.register("runtime.reset", () => runtimeManager.reset());
+    offscreenRouter.register("runtime.getState", () => runtimeManager.getState());
+    offscreenRouter.register("runtime.getDiagnostics", () => runtimeManager.getDiagnostics());
+    offscreenRouter.register("runtime.ping", () => runtimeManager.ping());
+    offscreenRouter.register("media.register", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.register(payload)));
+
+    const platform = new FakeOffscreenPlatform(offscreenRouter, () => runtimeManager.initialize());
+    const offscreenManager = new OffscreenManager(platform);
+    const backgroundRuntime = new BackgroundRuntime(offscreenManager, new FakeSettings());
+    const backgroundRouter = new BackgroundMessageRouter(
+      backgroundRuntime,
+      "capcam-test",
+      "chrome-extension://capcam-test/",
+    );
+    const client = new MessagingClient({
+      sendMessage: (message) => backgroundRouter.handle(message, {
+        id: "capcam-test",
+        url: "chrome-extension://capcam-test/popup.html",
+      }),
+    });
+    const ingestClient = new MediaIngestClient(client, transferStore);
+
+    // Create a valid small JPEG header
+    const jpegBytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x60, 0x00, 0x60, 0x00, 0x00, 0xFF, 0xD9]);
+    const jpegFile = new File([jpegBytes], "photo.jpg", { type: "image/jpeg" });
+
+    const record = await ingestClient.ingest(jpegFile);
+    expect(record.status).toBe("READY");
+    expect(record.kind).toBe("image");
+    expect(record.mimeType).toBe("image/jpeg");
+    expect(record.name).toBe("photo.jpg");
+  });
+
+  it("handles corrupted/invalid image with a controlled error response", async () => {
+    const transferStore = new MemoryTransferStore();
+    const imageResources = new FakeImageResources();
+    const urlApi = new FakeObjectUrlApi();
+    const engine = new MediaEngine({
+      transferStore,
+      imageResources,
+      objectUrls: new ObjectUrlManager(urlApi),
+    });
+    const mediaRuntime = new MediaRuntime(engine);
+    const offscreenRuntime = new OffscreenRuntime(mediaRuntime);
+    const runtimeManager = offscreenRuntime.manager;
+    const offscreenRouter = new CommandRouter({
+      authorize: (command) => runtimeManager.authorizeCommand(command.type, command.runtimeSessionId),
+      getRuntimeSessionId: () => runtimeManager.getState().runtimeSessionId,
+    });
+    offscreenRouter.register("runtime.initialize", () => runtimeManager.initialize());
+    offscreenRouter.register("runtime.shutdown", () => runtimeManager.shutdown());
+    offscreenRouter.register("runtime.reset", () => runtimeManager.reset());
+    offscreenRouter.register("runtime.getState", () => runtimeManager.getState());
+    offscreenRouter.register("runtime.getDiagnostics", () => runtimeManager.getDiagnostics());
+    offscreenRouter.register("runtime.ping", () => runtimeManager.ping());
+    offscreenRouter.register("media.register", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.register(payload)));
+
+    const platform = new FakeOffscreenPlatform(offscreenRouter, () => runtimeManager.initialize());
+    const offscreenManager = new OffscreenManager(platform);
+    const backgroundRuntime = new BackgroundRuntime(offscreenManager, new FakeSettings());
+    const backgroundRouter = new BackgroundMessageRouter(
+      backgroundRuntime,
+      "capcam-test",
+      "chrome-extension://capcam-test/",
+    );
+    const client = new MessagingClient({
+      sendMessage: (message) => backgroundRouter.handle(message, {
+        id: "capcam-test",
+        url: "chrome-extension://capcam-test/popup.html",
+      }),
+    });
+    const ingestClient = new MediaIngestClient(client, transferStore);
+
+    const corruptFile = new File([new Uint8Array([0x00, 0x01, 0x02, 0x03])], "corrupt.png", { type: "image/png" });
+    await expect(ingestClient.ingest(corruptFile)).rejects.toMatchObject({
+      code: "CAPCAM_MEDIA_ERROR",
+      metadata: { mediaCode: "MEDIA_UNSUPPORTED_TYPE" },
+    });
+  });
 });

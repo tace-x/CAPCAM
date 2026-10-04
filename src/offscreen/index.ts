@@ -82,12 +82,12 @@ router.register("playback.setRate", (payload) => runSubsystem(() => mediaRuntime
 router.register("playback.getState", () => runSubsystem(() => mediaRuntime.getPlaybackState()));
 router.register("playback.dispose", (payload) => runSubsystem(() => mediaRuntime.disposePlayback(payload)));
 
-function isServiceWorkerSender(sender: chrome.runtime.MessageSender): boolean {
-  return sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL("background.js");
+function isAuthorizedCommandSender(sender: chrome.runtime.MessageSender): boolean {
+  return sender.id === chrome.runtime.id && sender.tab === undefined;
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!isServiceWorkerSender(sender) || isEventEnvelope(message)) return false;
+  if (!isAuthorizedCommandSender(sender) || isEventEnvelope(message)) return false;
   void router.handle(message).then(sendResponse).catch((error: unknown) => {
     const failure = toCapCamError(error);
     logger.error("Unexpected offscreen command listener failure.", { code: failure.code });
