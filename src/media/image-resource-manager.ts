@@ -30,6 +30,12 @@ function imageFailure(error: unknown): MediaEngineError {
   });
 }
 
+/** Dimensions resolved by whichever decode strategy succeeds first. */
+interface DecodeResult {
+  width: number;
+  height: number;
+}
+
 export class ImageResourceManager implements ImageResourceManagerPort {
   private readonly images = new Map<string, ImageElementLike>();
 
@@ -52,12 +58,12 @@ export class ImageResourceManager implements ImageResourceManagerPort {
     const image = this.createImage();
     this.images.set(mediaId, image);
     try {
-      await this.waitForDecode(image, sourceUrl, signal, timeoutMs);
+      const result = await this.waitForDecode(image, sourceUrl, signal, timeoutMs);
       if (signal.aborted) throw abortError();
-      if (!Number.isInteger(image.naturalWidth) || !Number.isInteger(image.naturalHeight) || image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+      if (!Number.isInteger(result.width) || !Number.isInteger(result.height) || result.width <= 0 || result.height <= 0) {
         throw new MediaEngineError("MEDIA_METADATA_FAILED", undefined, { mediaId });
       }
-      return { width: image.naturalWidth, height: image.naturalHeight };
+      return { width: result.width, height: result.height };
     } catch (error) {
       await this.releaseImage(mediaId);
       throw imageFailure(error);
@@ -85,7 +91,7 @@ export class ImageResourceManager implements ImageResourceManagerPort {
     return this.images.get(mediaId);
   }
 
-  private waitForDecode(image: ImageElementLike, sourceUrl: string, signal: AbortSignal, timeoutMs: number): Promise<void> {
+  private waitForDecode(image: ImageElementLike, sourceUrl: string, signal: AbortSignal, timeoutMs: number): Promise<DecodeResult> {
     return new Promise((resolve, reject) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -97,37 +103,65 @@ export class ImageResourceManager implements ImageResourceManagerPort {
         image.removeEventListener("load", onLoad);
         image.removeEventListener("error", onError);
       };
-      const finish = (error?: MediaEngineError): void => {
+      const finish = (result?: DecodeResult, error?: MediaEngineError): void => {
         if (settled) return;
         settled = true;
         cleanup();
-        if (error === undefined) resolve();
-        else reject(error);
+        if (error !== undefined) reject(error);
+        else if (result !== undefined) resolve(result);
+        else reject(new MediaEngineError("MEDIA_DECODE_FAILED"));
       };
-      const onAbort = (): void => finish(abortError());
+      const finishFromImage = (): void => {
+        finish({ width: image.naturalWidth, height: image.naturalHeight });
+      };
+      const onAbort = (): void => { finish(undefined, abortError()); };
       const onLoad = (): void => {
-        if (!hasAsyncDecode) finish();
+        if (!hasAsyncDecode) finishFromImage();
       };
-      const onError = (): void => finish(new MediaEngineError("MEDIA_DECODE_FAILED"));
+      const onError = (): void => { finish(undefined, new MediaEngineError("MEDIA_DECODE_FAILED")); };
 
       if (signal.aborted) {
-        finish(abortError());
+        finish(undefined, abortError());
         return;
       }
       signal.addEventListener("abort", onAbort, { once: true });
       image.addEventListener("load", onLoad);
       image.addEventListener("error", onError);
-      timer = setTimeout(() => finish(new MediaEngineError("MEDIA_LOAD_TIMEOUT")), timeoutMs);
+      timer = setTimeout(() => finish(undefined, new MediaEngineError("MEDIA_LOAD_TIMEOUT")), timeoutMs);
 
       try {
         image.src = sourceUrl;
+
+        // Primary decode path: Image.decode() or load event (works in regular pages)
         if (hasAsyncDecode) {
-          void image.decode?.().then(() => finish(), (error: unknown) => finish(imageFailure(error)));
+          void image.decode?.().then(
+            () => finishFromImage(),
+            (error: unknown) => finish(undefined, imageFailure(error)),
+          );
         } else if (image.complete && image.naturalWidth > 0) {
-          finish();
+          finishFromImage();
+        }
+
+        // Parallel fallback: createImageBitmap works reliably in offscreen documents
+        // where Image.decode() and load events may silently hang because the offscreen
+        // document has no visible rendering pipeline. This races against the primary
+        // path — whichever resolves first wins via the `settled` guard.
+        if (typeof createImageBitmap === "function" && sourceUrl.startsWith("blob:")) {
+          void fetch(sourceUrl)
+            .then((response) => response.blob())
+            .then((blob) => createImageBitmap(blob))
+            .then((bitmap) => {
+              const w = bitmap.width;
+              const h = bitmap.height;
+              bitmap.close();
+              finish({ width: w, height: h });
+            })
+            .catch(() => {
+              // If createImageBitmap also fails, the primary path timeout will handle it.
+            });
         }
       } catch (error) {
-        finish(imageFailure(error));
+        finish(undefined, imageFailure(error));
       }
     });
   }
