@@ -12,6 +12,7 @@ import { CanvasStreamPipelineFactory } from "../stream/canvas-stream-pipeline";
 import { StreamManager } from "../stream/stream-manager";
 import { PlaybackEngine } from "../playback/playback-engine";
 import type { EventEnvelope } from "../messaging/events";
+import { isAuthorizedOffscreenCommandSender } from "./authorized-sender";
 
 const logger = createLogger("Offscreen");
 let runtime: RuntimeManager | null = null;
@@ -82,12 +83,11 @@ router.register("playback.setRate", (payload) => runSubsystem(() => mediaRuntime
 router.register("playback.getState", () => runSubsystem(() => mediaRuntime.getPlaybackState()));
 router.register("playback.dispose", (payload) => runSubsystem(() => mediaRuntime.disposePlayback(payload)));
 
-function isAuthorizedCommandSender(sender: chrome.runtime.MessageSender): boolean {
-  return sender.id === chrome.runtime.id && sender.tab === undefined;
-}
+const extensionId = chrome.runtime.id;
+const backgroundUrl = chrome.runtime.getURL("background.js");
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!isAuthorizedCommandSender(sender) || isEventEnvelope(message)) return false;
+  if (!isAuthorizedOffscreenCommandSender(sender, extensionId, backgroundUrl) || isEventEnvelope(message)) return false;
   void router.handle(message).then(sendResponse).catch((error: unknown) => {
     const failure = toCapCamError(error);
     logger.error("Unexpected offscreen command listener failure.", { code: failure.code });
