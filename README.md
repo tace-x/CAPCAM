@@ -68,7 +68,7 @@ npm ci
 
 ### 3. Development Commands
 ```sh
-npm test                 # Run complete Vitest suite (49 files, 257 tests)
+npm test                 # Run complete Vitest suite (49 files, 260 tests)
 npm run lint             # Run ESLint validation
 npm run typecheck        # Run TypeScript type check
 npm run dev              # Start Vite local development server
@@ -133,7 +133,7 @@ For local testing of WebRTC track replacement and MediaStream routing without mo
 | **12** | Release Packaging & Distribution | **COMPLETE** |
 
 > **Note on Browser Verification:**
-> All implementation and automated unit/integration/stress/security tests (257 tests across 49 files) pass 100%. Controlled WebRTC sender replacement and canvas capture pipeline are verified in real headed Chrome 154 on macOS. `PHASE_06_VERIFIED` remains `false` in `src/config/capabilities.ts` because Chromium blocks cross-context `MediaStream` cloning over `BroadcastChannel` with `DataCloneError`, which CapCam circumvents through its in-page `GenericWebRtcTargetAdapter`.
+> All implementation and automated unit/integration/stress/security tests (260 tests across 49 files) pass 100%. Controlled WebRTC sender replacement and canvas capture pipeline are verified in real headed Chrome 154 on macOS. `PHASE_06_VERIFIED` remains `false` in `src/config/capabilities.ts` because Chromium blocks cross-context `MediaStream` cloning over `BroadcastChannel` with `DataCloneError`, which CapCam circumvents through its in-page `GenericWebRtcTargetAdapter`.
 
 ---
 
