@@ -8,6 +8,7 @@ import { createErrorResponse, extractRequestId, isEventEnvelope } from "../messa
 import { createEvent } from "../messaging/events";
 import { isTrustedOffscreenEvent } from "./event-relay";
 import { generateRequestId } from "../messaging/commands";
+import { isRuntimeStateSnapshot } from "../shared/runtime-types";
 
 const logger = createLogger("Runtime");
 const extensionId = chrome.runtime.id;
@@ -28,6 +29,9 @@ const messageRouter = new BackgroundMessageRouter(runtime, extensionId, chrome.r
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isEventEnvelope(message)) {
     if (isTrustedOffscreenEvent(message, sender, extensionId, chrome.runtime.getURL("public/offscreen.html"))) {
+      if (message.type === "runtime.lifecycleChanged" && isRuntimeStateSnapshot(message.payload)) {
+        runtime.observeRuntimeLifecycle(message.payload);
+      }
       void chrome.runtime.sendMessage(message).catch((error: unknown) => {
         logger.warn("An offscreen event could not be relayed to extension UI contexts.", { code: toCapCamError(error).code });
       });

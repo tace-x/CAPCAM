@@ -1,7 +1,8 @@
 import { CapCamError } from "../shared/errors";
-import { createCommand, type CommandArguments, type CommandResult, type CommandType } from "./commands";
+import { attachRuntimeSessionId, createCommand, type CommandArguments, type CommandResult, type CommandType } from "./commands";
 import { isEventEnvelope, isResponseData, isResponseEnvelope, type ResponseEnvelope } from "./protocol";
 import type { EventEnvelope } from "./events";
+import { isRuntimeStateSnapshot } from "../shared/runtime-types";
 
 export interface MessageTransport {
   sendMessage(message: unknown): Promise<unknown>;
@@ -60,13 +61,34 @@ function responseError(response: ResponseEnvelope): CapCamError {
 }
 
 export class MessagingClient {
+  private runtimeSessionId?: string | undefined;
+
   constructor(
     private readonly transport: MessageTransport = createChromeTransport(),
     private readonly eventSource: RuntimeEventSource | undefined = createChromeEventSource(),
   ) {}
 
+  getKnownRuntimeSessionId(): string | undefined {
+    return this.runtimeSessionId;
+  }
+
+  setKnownRuntimeSessionId(sessionId: string | undefined): void {
+    this.runtimeSessionId = sessionId;
+  }
+
   async send<T extends CommandType>(type: T, ...args: CommandArguments<T>): Promise<CommandResult<T>> {
-    const command = createCommand(type, ...args);
+    return this.sendInternal(type, args, false);
+  }
+
+  private async sendInternal<T extends CommandType>(
+    type: T,
+    args: CommandArguments<T>,
+    isRetry: boolean,
+  ): Promise<CommandResult<T>> {
+    let command = createCommand(type, ...args);
+    if (this.runtimeSessionId !== undefined) {
+      command = attachRuntimeSessionId(command, this.runtimeSessionId);
+    }
     let rawResponse: unknown;
     try {
       rawResponse = await this.transport.sendMessage(command);
@@ -81,7 +103,27 @@ export class MessagingClient {
     if (rawResponse.requestId !== command.requestId) {
       throw new CapCamError("CAPCAM_PROTOCOL_ERROR", "The extension response did not match its request ID.");
     }
-    if (!rawResponse.success) throw responseError(rawResponse);
+
+    if (rawResponse.runtimeSessionId !== undefined) {
+      this.runtimeSessionId = rawResponse.runtimeSessionId;
+    }
+
+    if (!rawResponse.success) {
+      const error = responseError(rawResponse);
+      if (error.code === "RUNTIME_SESSION_MISMATCH" && !isRetry) {
+        try {
+          const freshState = await this.sendInternal("runtime.getState", [] as unknown as CommandArguments<"runtime.getState">, true);
+          if (isRuntimeStateSnapshot(freshState)) {
+            this.runtimeSessionId = freshState.runtimeSessionId;
+          }
+        } catch {
+          throw error;
+        }
+        return this.sendInternal(type, args, true);
+      }
+      throw error;
+    }
+
     if (!isResponseData(type, rawResponse.data)) {
       throw new CapCamError("CAPCAM_PROTOCOL_ERROR", "The extension returned an invalid command response payload.", { type });
     }
@@ -93,7 +135,12 @@ export class MessagingClient {
     if (source === undefined) return () => undefined;
     const onMessage: RuntimeEventListener = (message, sender) => {
       if (sender.id !== source.extensionId || sender.url !== source.backgroundUrl) return;
-      if (isEventEnvelope(message)) listener(message);
+      if (isEventEnvelope(message)) {
+        if (message.type === "runtime.lifecycleChanged" && isRuntimeStateSnapshot(message.payload)) {
+          this.runtimeSessionId = message.payload.runtimeSessionId;
+        }
+        listener(message);
+      }
     };
     source.addListener(onMessage);
     return () => source.removeListener(onMessage);

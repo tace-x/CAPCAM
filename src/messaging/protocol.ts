@@ -18,6 +18,86 @@ export interface ResponseError {
   metadata?: Readonly<Record<string, unknown>>;
 }
 
+export interface SerializedProtocolError {
+  code: string;
+  message: string;
+  details?: Readonly<Record<string, unknown>> | undefined;
+  command?: string | undefined;
+  runtimeSessionId?: string | undefined;
+  expectedRuntimeSessionId?: string | undefined;
+  actualRuntimeSessionId?: string | undefined;
+}
+
+export interface ProtocolErrorContext {
+  command?: string | undefined;
+  runtimeSessionId?: string | undefined;
+  expectedRuntimeSessionId?: string | undefined;
+  actualRuntimeSessionId?: string | undefined;
+}
+
+export function serializeProtocolError(
+  error: unknown,
+  context?: ProtocolErrorContext,
+): SerializedProtocolError {
+  const code = error instanceof CapCamError
+    ? error.code
+    : typeof (error as Record<string, unknown> | null)?.code === "string"
+      ? (error as Record<string, unknown>).code as string
+      : "CAPCAM_RUNTIME_ERROR";
+
+  const message = error instanceof Error
+    ? (error.message || "An unexpected CapCam error occurred.")
+    : typeof (error as Record<string, unknown> | null)?.message === "string"
+      ? (error as Record<string, unknown>).message as string
+      : typeof error === "string"
+        ? error
+        : "An unexpected CapCam error occurred.";
+
+  const rawMetadata: unknown = error instanceof CapCamError
+    ? error.metadata
+    : isPlainRecord(error)
+      ? (error.metadata ?? error.details)
+      : undefined;
+
+  const metadata: Record<string, unknown> = isPlainRecord(rawMetadata) ? rawMetadata : {};
+
+  const command = (typeof metadata.command === "string" ? metadata.command : undefined) ??
+    context?.command;
+
+  const runtimeSessionId = (typeof metadata.runtimeSessionId === "string" ? metadata.runtimeSessionId : undefined) ??
+    context?.runtimeSessionId;
+
+  const expectedRuntimeSessionId = (typeof metadata.expectedRuntimeSessionId === "string" ? metadata.expectedRuntimeSessionId : undefined) ??
+    context?.expectedRuntimeSessionId;
+
+  const actualRuntimeSessionId = (typeof metadata.actualRuntimeSessionId === "string"
+    ? metadata.actualRuntimeSessionId
+    : typeof metadata.receivedRuntimeSessionId === "string"
+      ? metadata.receivedRuntimeSessionId
+      : undefined) ?? context?.actualRuntimeSessionId;
+
+  const details: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) {
+      details[key] = value;
+    } else if (Array.isArray(value) && value.every((item) => typeof item === "string" || typeof item === "number" || typeof item === "boolean" || item === null)) {
+      details[key] = [...value];
+    } else if (isPlainRecord(value)) {
+      details[key] = { ...value };
+    }
+  }
+
+  return {
+    code,
+    message,
+    ...(Object.keys(details).length > 0 ? { details } : {}),
+    ...(command !== undefined ? { command } : {}),
+    ...(runtimeSessionId !== undefined ? { runtimeSessionId } : {}),
+    ...(expectedRuntimeSessionId !== undefined ? { expectedRuntimeSessionId } : {}),
+    ...(actualRuntimeSessionId !== undefined ? { actualRuntimeSessionId } : {}),
+  };
+}
+
 export interface ResponseEnvelope<T = unknown> {
   protocol: typeof PROTOCOL_VERSION;
   requestId: string;

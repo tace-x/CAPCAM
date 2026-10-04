@@ -122,6 +122,11 @@ export class BackgroundRuntime {
     return this.offscreen.getKnownRuntimeSessionId?.() ?? undefined;
   }
 
+  observeRuntimeLifecycle(snapshot: RuntimeStateSnapshot): void {
+    this.offscreen.observeRuntimeLifecycle?.(snapshot);
+    this.applyRuntimeSnapshot(snapshot);
+  }
+
   getCameraIntegrationStatus(): CameraIntegrationStatus {
     return this.cameraIntegration.getStatus();
   }

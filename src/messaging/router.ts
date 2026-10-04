@@ -1,7 +1,7 @@
 import { CapCamError, toCapCamError } from "../shared/errors";
 import { createLogger } from "../shared/logger";
 import { generateRequestId, type CommandArguments, type CommandEnvelope, type CommandMap, type CommandPayload, type CommandResult, type CommandType } from "./commands";
-import { createErrorResponse, createSuccessResponse, extractRequestId, isResponseData, validateCommand, type ResponseEnvelope } from "./protocol";
+import { createErrorResponse, createSuccessResponse, extractRequestId, isResponseData, serializeProtocolError, validateCommand, type ResponseEnvelope } from "./protocol";
 
 export type CommandHandler<T extends CommandType> = (
   payload: CommandPayload<T>,
@@ -52,7 +52,11 @@ export class CommandRouter {
       return createSuccessResponse(command.requestId, data, this.readSessionId(data));
     } catch (error) {
       const capcamError = toCapCamError(error);
-      logger.warn("Command handler returned a structured error.", { type: command.type, code: capcamError.code });
+      const serialized = serializeProtocolError(capcamError, {
+        command: command.type,
+        runtimeSessionId: this.readSessionId(),
+      });
+      logger.warn("Command handler returned a structured error.", serialized);
       return createErrorResponse(command.requestId, capcamError, this.readSessionId());
     }
   }

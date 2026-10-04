@@ -14,6 +14,7 @@ export interface OffscreenService {
   getStatus(): Promise<OffscreenRuntimeInfo>;
   shutdown(): Promise<OffscreenRuntimeInfo>;
   getKnownRuntimeSessionId?(): string | null;
+  observeRuntimeLifecycle?(snapshot: RuntimeStateSnapshot): void;
   execute<T extends OffscreenCommandType>(type: T, ...args: CommandArguments<T>): Promise<CommandResult<T>>;
 }
 
@@ -204,6 +205,10 @@ export class OffscreenManager implements OffscreenService {
 
   getKnownRuntimeSessionId(): string | null {
     return this.runtimeSessionId;
+  }
+
+  observeRuntimeLifecycle(snapshot: RuntimeStateSnapshot): void {
+    this.rememberState(snapshot);
   }
 
   private async shutdownRuntimeCommand(): Promise<RuntimeStateSnapshot> {
