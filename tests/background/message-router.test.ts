@@ -78,10 +78,26 @@ describe("background sender boundary", () => {
     });
     const normalRouter = new BackgroundMessageRouter(runtime, "capcam-id", "chrome-extension://capcam-id/");
     const normalBuild = await normalRouter.handle(createCommand("settings.get"), pageSender);
-
     expect(isResponseEnvelope(allowed)).toBe(true);
     expect(allowed.success).toBe(true);
     expect(wrongPage.success).toBe(false);
     expect(normalBuild.success).toBe(false);
+  });
+
+  it("identifies trusted extension UI senders and rejects service-worker or external senders", () => {
+    const runtime = new BackgroundRuntime(offscreen, settings);
+    const router = new BackgroundMessageRouter(runtime, "capcam-id", "chrome-extension://capcam-id/");
+
+    // Extension UI pages (e.g. popup) are trusted:
+    expect(router.isTrustedSender({ id: "capcam-id", url: "chrome-extension://capcam-id/popup.html" })).toBe(true);
+    expect(router.isTrustedSender({ id: "capcam-id", url: "chrome-extension://capcam-id/developer-test.html" })).toBe(true);
+
+    // Background service worker itself (has no url property) must NOT be intercepted by the background router:
+    expect(router.isTrustedSender({ id: "capcam-id" })).toBe(false);
+    expect(router.isTrustedSender({ id: "capcam-id", url: undefined })).toBe(false);
+
+    // External origins or content scripts with tabs:
+    expect(router.isTrustedSender({ id: "capcam-id", url: "https://example.test/", tab: { id: 1 } })).toBe(false);
+    expect(router.isTrustedSender({ id: "other-id", url: "chrome-extension://other-id/popup.html" })).toBe(false);
   });
 });

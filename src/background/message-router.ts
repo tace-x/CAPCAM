@@ -71,9 +71,13 @@ export class BackgroundMessageRouter {
     this.router.register("camera.switchSource", (payload) => this.runtime.switchCameraSource(payload.mediaId));
   }
 
+  isTrustedSender(sender: MessageSenderLike): boolean {
+    return this.isTrustedExtensionPage(sender) || this.isTrustedCameraTestPage(sender);
+  }
+
   async handle(message: unknown, sender: MessageSenderLike): Promise<ResponseEnvelope> {
     const requestId = extractRequestId(message) ?? generateRequestId();
-    if (!this.isTrustedExtensionPage(sender) && !this.isTrustedCameraTestPage(sender)) {
+    if (!this.isTrustedSender(sender)) {
       return createErrorResponse(
         requestId,
         new CapCamError("CAPCAM_PERMISSION_ERROR", "Messages from this context are not enabled in Phase 01."),

@@ -34,6 +34,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return false;
   }
+  if (!messageRouter.isTrustedSender(sender)) {
+    return false;
+  }
   void messageRouter.handle(message, sender).then(sendResponse).catch((error: unknown) => {
     const failure = toCapCamError(error);
     logger.error("Unexpected message listener failure.", { code: failure.code });
