@@ -422,8 +422,10 @@ class PageGeneratedMediaSession {
         record.source.element.pause();
         record.source.element.removeAttribute("src");
         record.source.element.load();
-      } else {
-        record.source.element.removeAttribute("src");
+      } else if ("removeAttribute" in record.source.element && typeof (record.source.element as HTMLImageElement).removeAttribute === "function") {
+        (record.source.element as HTMLImageElement).removeAttribute("src");
+      } else if ("close" in record.source.element && typeof (record.source.element as ImageBitmap).close === "function") {
+        (record.source.element as ImageBitmap).close();
       }
       URL.revokeObjectURL(record.objectUrl);
     }

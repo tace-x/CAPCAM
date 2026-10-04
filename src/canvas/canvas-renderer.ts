@@ -28,7 +28,7 @@ export class CanvasRenderer {
     this.config = next;
   }
 
-  renderImage(source: HTMLImageElement): boolean {
+  renderImage(source: CanvasImageSource): boolean {
     if (this.source?.kind !== "image" || this.source.element !== source) {
       throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The image does not belong to the current render source.");
     }
@@ -50,9 +50,18 @@ export class CanvasRenderer {
     let sourceWidth = source.width;
     let sourceHeight = source.height;
     if (source.kind === "image") {
-      if (!source.element.complete || source.element.naturalWidth <= 0 || source.element.naturalHeight <= 0) return false;
-      sourceWidth = source.element.naturalWidth;
-      sourceHeight = source.element.naturalHeight;
+      const img = source.element;
+      if ("complete" in img && "naturalWidth" in img) {
+        const htmlImg = img as HTMLImageElement;
+        if (!htmlImg.complete || htmlImg.naturalWidth <= 0 || htmlImg.naturalHeight <= 0) return false;
+        sourceWidth = htmlImg.naturalWidth;
+        sourceHeight = htmlImg.naturalHeight;
+      } else if ("width" in img && "height" in img) {
+        const bitmap = img as ImageBitmap;
+        if (bitmap.width <= 0 || bitmap.height <= 0) return false;
+        sourceWidth = bitmap.width;
+        sourceHeight = bitmap.height;
+      }
     } else {
       const video = source.element;
       if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) return false;

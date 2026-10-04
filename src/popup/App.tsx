@@ -712,7 +712,16 @@ export function App() {
           id="stream-source"
           className="control-select"
           value={selectedMediaId}
-          onChange={(event) => setSelectedMediaId(event.currentTarget.value)}
+          onChange={(event) => {
+            const nextMediaId = event.currentTarget.value;
+            setSelectedMediaId(nextMediaId);
+            if (canControlStream && switchable && streamId !== null && nextMediaId !== "") {
+              void runStreamCommand(() => client.send("stream.switchSource", { streamId, mediaId: nextMediaId }));
+            }
+            if (cameraStatus?.capcamActive === true && nextMediaId !== "") {
+              void runCameraCommand(() => client.send("camera.switchSource", { mediaId: nextMediaId }));
+            }
+          }}
           disabled={readyMedia.length === 0 || streamLoading}
           aria-label="Select source media for canvas stream"
         >

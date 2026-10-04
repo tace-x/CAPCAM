@@ -262,8 +262,10 @@ async function releaseCurrentSource(): Promise<void> {
       mediaElement.pause();
       mediaElement.removeAttribute("src");
       mediaElement.load();
-    } else {
-      mediaElement.removeAttribute("src");
+    } else if ("removeAttribute" in mediaElement && typeof (mediaElement as HTMLImageElement).removeAttribute === "function") {
+      (mediaElement as HTMLImageElement).removeAttribute("src");
+    } else if ("close" in mediaElement && typeof (mediaElement as ImageBitmap).close === "function") {
+      (mediaElement as ImageBitmap).close();
     }
   }
   if (currentSource !== null) sources.delete(currentSource.mediaId);

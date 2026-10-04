@@ -222,7 +222,7 @@ export class MediaEngine {
     if (record.kind === "image") {
       const image = this.imageResources.getImageElement?.(mediaId);
       if (image === undefined) throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The decoded image element is unavailable.", { mediaId });
-      return { mediaId, kind: "image", width: record.width, height: record.height, element: image as unknown as HTMLImageElement };
+      return { mediaId, kind: "image", width: record.width, height: record.height, element: image as CanvasImageSource };
     }
 
     const video = this.videoResources.getVideoElement?.(mediaId);

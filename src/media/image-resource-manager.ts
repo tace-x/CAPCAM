@@ -12,11 +12,13 @@ export interface ImageElementLike {
   removeAttribute(name: string): void;
 }
 
+export type DecodedImageResource = CanvasImageSource | ImageElementLike;
+
 export interface ImageResourceManagerPort {
   load(mediaId: string, sourceUrl: string, signal: AbortSignal, timeoutMs?: number): Promise<ImageResourceInfo>;
   releaseImage(mediaId: string): Promise<void>;
   hasImage(mediaId: string): boolean;
-  getImageElement?(mediaId: string): ImageElementLike | undefined;
+  getImageElement?(mediaId: string): DecodedImageResource | undefined;
 }
 
 function abortError(): MediaEngineError {
@@ -34,10 +36,11 @@ function imageFailure(error: unknown): MediaEngineError {
 interface DecodeResult {
   width: number;
   height: number;
+  resource: DecodedImageResource;
 }
 
 export class ImageResourceManager implements ImageResourceManagerPort {
-  private readonly images = new Map<string, ImageElementLike>();
+  private readonly images = new Map<string, DecodedImageResource>();
 
   constructor(
     private readonly createImage: () => ImageElementLike = () => new Image(),
@@ -56,26 +59,31 @@ export class ImageResourceManager implements ImageResourceManagerPort {
     if (signal.aborted) throw abortError();
 
     const image = this.createImage();
-    this.images.set(mediaId, image);
     try {
       const result = await this.waitForDecode(image, sourceUrl, signal, timeoutMs);
-      if (signal.aborted) throw abortError();
+      if (signal.aborted) {
+        this.closeResource(result.resource);
+        throw abortError();
+      }
       if (!Number.isInteger(result.width) || !Number.isInteger(result.height) || result.width <= 0 || result.height <= 0) {
+        this.closeResource(result.resource);
         throw new MediaEngineError("MEDIA_METADATA_FAILED", undefined, { mediaId });
       }
+      this.images.set(mediaId, result.resource);
       return { width: result.width, height: result.height };
     } catch (error) {
+      this.closeResource(image);
       await this.releaseImage(mediaId);
       throw imageFailure(error);
     }
   }
 
   async releaseImage(mediaId: string): Promise<void> {
-    const image = this.images.get(mediaId);
-    if (image === undefined) return;
+    const resource = this.images.get(mediaId);
+    if (resource === undefined) return;
     this.images.delete(mediaId);
     try {
-      image.removeAttribute("src");
+      this.closeResource(resource);
     } catch (error) {
       throw new MediaEngineError("MEDIA_RESOURCE_FAILED", "CapCam could not release the decoded image.", {
         reason: error instanceof Error ? error.message : "Unknown image release failure.",
@@ -87,8 +95,16 @@ export class ImageResourceManager implements ImageResourceManagerPort {
     return this.images.has(mediaId);
   }
 
-  getImageElement(mediaId: string): ImageElementLike | undefined {
+  getImageElement(mediaId: string): DecodedImageResource | undefined {
     return this.images.get(mediaId);
+  }
+
+  private closeResource(resource: DecodedImageResource): void {
+    if ("close" in resource && typeof (resource as ImageBitmap).close === "function") {
+      (resource as ImageBitmap).close();
+    } else if ("removeAttribute" in resource && typeof (resource as ImageElementLike).removeAttribute === "function") {
+      (resource as ImageElementLike).removeAttribute("src");
+    }
   }
 
   private waitForDecode(image: ImageElementLike, sourceUrl: string, signal: AbortSignal, timeoutMs: number): Promise<DecodeResult> {
@@ -112,7 +128,7 @@ export class ImageResourceManager implements ImageResourceManagerPort {
         else reject(new MediaEngineError("MEDIA_DECODE_FAILED"));
       };
       const finishFromImage = (): void => {
-        finish({ width: image.naturalWidth, height: image.naturalHeight });
+        finish({ width: image.naturalWidth, height: image.naturalHeight, resource: image });
       };
       const onAbort = (): void => { finish(undefined, abortError()); };
       const onLoad = (): void => {
@@ -144,8 +160,7 @@ export class ImageResourceManager implements ImageResourceManagerPort {
 
         // Parallel fallback: createImageBitmap works reliably in offscreen documents
         // where Image.decode() and load events may silently hang because the offscreen
-        // document has no visible rendering pipeline. This races against the primary
-        // path — whichever resolves first wins via the `settled` guard.
+        // document has no visible rendering pipeline.
         if (typeof createImageBitmap === "function" && sourceUrl.startsWith("blob:")) {
           void fetch(sourceUrl)
             .then((response) => response.blob())
@@ -153,8 +168,11 @@ export class ImageResourceManager implements ImageResourceManagerPort {
             .then((bitmap) => {
               const w = bitmap.width;
               const h = bitmap.height;
-              bitmap.close();
-              finish({ width: w, height: h });
+              if (settled) {
+                bitmap.close();
+              } else {
+                finish({ width: w, height: h, resource: bitmap });
+              }
             })
             .catch(() => {
               // If createImageBitmap also fails, the primary path timeout will handle it.

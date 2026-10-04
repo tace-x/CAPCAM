@@ -76,8 +76,17 @@ export class PlaybackController implements PlaybackControllerPort {
     try {
       const source = this.requireSource();
       if (source.kind === "image") {
-        if (!source.element.complete || source.element.naturalWidth <= 0 || source.element.naturalHeight <= 0) {
-          throw new PlaybackEngineError("PLAYBACK_LOAD_FAILED", "The decoded image is not ready for presentation.", { mediaId: source.mediaId });
+        const img = source.element;
+        if ("complete" in img && "naturalWidth" in img) {
+          const htmlImg = img as HTMLImageElement;
+          if (!htmlImg.complete || htmlImg.naturalWidth <= 0 || htmlImg.naturalHeight <= 0) {
+            throw new PlaybackEngineError("PLAYBACK_LOAD_FAILED", "The decoded image is not ready for presentation.", { mediaId: source.mediaId });
+          }
+        } else if ("width" in img && "height" in img) {
+          const bitmap = img as ImageBitmap;
+          if (bitmap.width <= 0 || bitmap.height <= 0) {
+            throw new PlaybackEngineError("PLAYBACK_LOAD_FAILED", "The decoded image is not ready for presentation.", { mediaId: source.mediaId });
+          }
         }
         this.imageRemainingMs = this.record.duration === null ? null : this.record.duration * 1000;
       } else {

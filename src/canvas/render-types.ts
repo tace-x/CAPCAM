@@ -29,9 +29,8 @@ export interface RenderTransform {
   sourceHeight: number;
 }
 
-/** DOM media resources are handles owned by Phase 02 resource managers, not protocol records. */
 export type RenderableMediaSource =
-  | { mediaId: string; kind: "image"; width: number; height: number; element: HTMLImageElement }
+  | { mediaId: string; kind: "image"; width: number; height: number; element: CanvasImageSource }
   | { mediaId: string; kind: "video"; width: number; height: number; element: HTMLVideoElement };
 
 export const DEFAULT_RENDER_CONFIG: Readonly<RenderConfig> = Object.freeze({
