@@ -595,113 +595,105 @@ export function App() {
         />
       )}
 
-      {/* 3. Camera Integration Section */}
-      <section className="section-container camera-section" aria-label="Camera integration controls">
+      {/* 3. Local Media Source & Files */}
+      <section className="section-container media-section" aria-label="Local media">
         <div className="section-heading">
           <div>
-            <h2>Camera integration</h2>
-            <p>Direct CapCam video track into a supported WebRTC sender</p>
+            <h2>Local media</h2>
+            <p>512 MiB local safety bound</p>
           </div>
-          <span className={`camera-live-badge ${cameraStatus?.capcamActive === true ? "is-live" : ""}`}>
-            {cameraStatus?.capcamActive === true ? "ACTIVE" : "OFF"}
-          </span>
+          <label className={`upload-button ${uploadCount > 0 ? "is-busy" : ""}`} htmlFor="media-upload-input">
+            <input
+              id="media-upload-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,video/mp4,video/webm,video/ogg"
+              multiple
+              onChange={(event) => void onFilesSelected(event)}
+              aria-label="Upload image or video files"
+            />
+            {uploadCount > 0 ? `Loading (${uploadCount})…` : "Upload media"}
+          </label>
         </div>
 
-        <div className="camera-status-grid" aria-live="polite">
-          <StatusRow label="WebRTC target" status={cameraConnectionStatus} />
-          <StatusRow label="Origin permission" status={cameraStatus?.permission.toUpperCase() ?? "UNKNOWN"} />
-          <StatusRow label="Integration" status={cameraStatus?.state ?? "UNKNOWN"} />
-          <StatusRow label="Original track" status={cameraStatus?.originalTrackAvailable ? "AVAILABLE" : "—"} />
-        </div>
-
-        {cameraStatus?.origin !== null && cameraStatus?.origin !== undefined && (
-          <p className="camera-origin">Target origin: <code>{cameraStatus.origin}</code></p>
-        )}
-
-        <label className="field-label" htmlFor="camera-source">Camera track source</label>
-        <select
-          id="camera-source"
-          className="control-select"
-          value={selectedMediaId}
-          onChange={(event) => setSelectedMediaId(event.currentTarget.value)}
-          disabled={readyMedia.length === 0 || cameraBusy}
-          aria-label="Select source media for camera integration"
-        >
-          {readyMedia.length === 0 ? (
-            <option value="">Upload media first</option>
-          ) : (
-            readyMedia.map((record) => (
-              <option key={record.id} value={record.id}>
-                {record.name} · {record.kind.toUpperCase()}
-              </option>
-            ))
-          )}
-        </select>
-
-        <div className="camera-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void runCameraCommand(() => client.send("camera.detect"))}
-            disabled={cameraBusy || cameraGateBlocked}
-            aria-label="Check WebRTC target"
-          >
-            Check target
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={() => void runCameraCommand(() => client.send("camera.enable"))}
-            disabled={cameraBusy || !cameraCanEnable}
-            aria-label="Turn camera replacement ON"
-          >
-            Camera ON
-          </button>
-          <button
-            type="button"
-            className="danger-button"
-            onClick={() => void runCameraCommand(() => client.send("camera.disable"))}
-            disabled={cameraBusy || !cameraCanDisable}
-            aria-label="Turn camera replacement OFF and restore track"
-          >
-            Camera OFF
-          </button>
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void runCameraCommand(() => client.send("camera.switchSource", { mediaId: selectedMediaId }))}
-            disabled={cameraBusy || !cameraCanDisable || selectedMediaId === ""}
-            aria-label="Switch camera track source"
-          >
-            Switch
-          </button>
-        </div>
-
-        {cameraGateBlocked ? (
-          <p className="camera-note is-blocked" role="note">
-            Verification required: Live camera replacement is gated until real Chrome browser verification is performed. No sender track is replaced.
-          </p>
-        ) : (
-          <p className="camera-note">
-            Replacement occurs only on explicit command for the detected target origin. CapCam does not emulate a hardware camera.
-          </p>
-        )}
-
-        {cameraStatus?.reason !== null && cameraStatus?.reason !== undefined && (
-          <p className="camera-reason" role="status">
-            {humanReadableReason(cameraStatus.reason)}
-          </p>
-        )}
-
-        {cameraError !== null && (
+        {mediaError !== null && (
           <ErrorSurface
-            title="Camera Integration Error"
-            message={cameraError}
-            reason={cameraStatus?.reason}
-            actionLabel="Check Target"
-            onAction={() => void runCameraCommand(() => client.send("camera.detect"))}
-            onDismiss={() => setCameraError(null)}
+            title="Media Load Error"
+            message={mediaError}
+            actionLabel="Dismiss"
+            onAction={() => setMediaError(null)}
+            onDismiss={() => setMediaError(null)}
           />
+        )}
+
+        <div className="media-preview" aria-label="Selected media preview">
+          <div className="preview-caption">
+            <strong>{selectedMedia?.name ?? "No media selected"}</strong>
+            <span>
+              {selectedMedia?.kind === "video" ? "Video preview" : selectedMedia?.kind === "image" ? "Image preview" : "Upload local files to begin"}
+            </span>
+          </div>
+          {selectedMedia === null ? (
+            <div className="preview-placeholder">Upload an image or video above to inspect and route.</div>
+          ) : selectedPreviewUrl === null ? (
+            <div className="preview-placeholder">Session preview available for files uploaded in this window.</div>
+          ) : selectedMedia.kind === "video" ? (
+            <video
+              className="media-preview-content"
+              src={selectedPreviewUrl}
+              controls
+              playsInline
+              preload="metadata"
+              aria-label={`Preview of ${selectedMedia.name}`}
+            />
+          ) : (
+            <img
+              className="media-preview-content"
+              src={selectedPreviewUrl}
+              alt={`Preview of ${selectedMedia.name}`}
+            />
+          )}
+        </div>
+
+        {mediaRecords.length === 0 ? (
+          <div className="empty-media">No media loaded yet. Select local files to begin.</div>
+        ) : (
+          <ul className="media-list" aria-label="Loaded media files list">
+            {mediaRecords.map((record) => {
+              const duration = formatDuration(record.duration);
+              const dimensions = record.width !== null && record.height !== null
+                ? `${record.width} × ${record.height}`
+                : "Dimensions pending…";
+              return (
+                <li className="media-card" key={record.id}>
+                  <div className={`media-kind ${record.kind === "video" ? "media-kind-video" : ""}`} aria-hidden="true">
+                    {record.kind === "image" ? "IMG" : "VID"}
+                  </div>
+                  <div className="media-details">
+                    <strong title={record.name}>{record.name}</strong>
+                    <span>{dimensions}{duration === null ? "" : ` · ${duration}`}</span>
+                    <span>{record.mimeType} · {formatBytes(record.size)}</span>
+                    {record.error !== undefined && (
+                      <span className="media-inline-error">{record.error.message}</span>
+                    )}
+                  </div>
+                  <div className={`media-status media-status-${record.status.toLowerCase()}`}>
+                    <span className="status-indicator" aria-hidden="true" />
+                    {record.status}
+                  </div>
+                  <button
+                    className="remove-button"
+                    type="button"
+                    onClick={() => void removeMedia(record.id)}
+                    disabled={removingIds.has(record.id)}
+                    aria-label={`Remove ${record.name}`}
+                    title="Remove media item"
+                  >
+                    {removingIds.has(record.id) ? "…" : "×"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 
@@ -1017,105 +1009,113 @@ export function App() {
         )}
       </section>
 
-      {/* 6. Media Source & Local Files */}
-      <section className="section-container media-section" aria-label="Local media">
+      {/* 6. Camera Integration Section */}
+      <section className="section-container camera-section" aria-label="Camera integration controls">
         <div className="section-heading">
           <div>
-            <h2>Local media</h2>
-            <p>512 MiB local safety bound</p>
+            <h2>Camera integration</h2>
+            <p>Direct CapCam video track into a supported WebRTC sender</p>
           </div>
-          <label className={`upload-button ${uploadCount > 0 ? "is-busy" : ""}`} htmlFor="media-upload-input">
-            <input
-              id="media-upload-input"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp,video/mp4,video/webm,video/ogg"
-              multiple
-              onChange={(event) => void onFilesSelected(event)}
-              aria-label="Upload image or video files"
-            />
-            {uploadCount > 0 ? `Loading (${uploadCount})…` : "Upload media"}
-          </label>
+          <span className={`camera-live-badge ${cameraStatus?.capcamActive === true ? "is-live" : ""}`}>
+            {cameraStatus?.capcamActive === true ? "ACTIVE" : "OFF"}
+          </span>
         </div>
 
-        {mediaError !== null && (
-          <ErrorSurface
-            title="Media Load Error"
-            message={mediaError}
-            actionLabel="Dismiss"
-            onAction={() => setMediaError(null)}
-            onDismiss={() => setMediaError(null)}
-          />
+        <div className="camera-status-grid" aria-live="polite">
+          <StatusRow label="WebRTC target" status={cameraConnectionStatus} />
+          <StatusRow label="Origin permission" status={cameraStatus?.permission.toUpperCase() ?? "UNKNOWN"} />
+          <StatusRow label="Integration" status={cameraStatus?.state ?? "UNKNOWN"} />
+          <StatusRow label="Original track" status={cameraStatus?.originalTrackAvailable ? "AVAILABLE" : "—"} />
+        </div>
+
+        {cameraStatus?.origin !== null && cameraStatus?.origin !== undefined && (
+          <p className="camera-origin">Target origin: <code>{cameraStatus.origin}</code></p>
         )}
 
-        <div className="media-preview" aria-label="Selected media preview">
-          <div className="preview-caption">
-            <strong>{selectedMedia?.name ?? "No media selected"}</strong>
-            <span>
-              {selectedMedia?.kind === "video" ? "Video preview" : selectedMedia?.kind === "image" ? "Image preview" : "Upload local files to begin"}
-            </span>
-          </div>
-          {selectedMedia === null ? (
-            <div className="preview-placeholder">Upload an image or video above to inspect and route.</div>
-          ) : selectedPreviewUrl === null ? (
-            <div className="preview-placeholder">Session preview available for files uploaded in this window.</div>
-          ) : selectedMedia.kind === "video" ? (
-            <video
-              className="media-preview-content"
-              src={selectedPreviewUrl}
-              controls
-              playsInline
-              preload="metadata"
-              aria-label={`Preview of ${selectedMedia.name}`}
-            />
+        <label className="field-label" htmlFor="camera-source">Camera track source</label>
+        <select
+          id="camera-source"
+          className="control-select"
+          value={selectedMediaId}
+          onChange={(event) => setSelectedMediaId(event.currentTarget.value)}
+          disabled={readyMedia.length === 0 || cameraBusy}
+          aria-label="Select source media for camera integration"
+        >
+          {readyMedia.length === 0 ? (
+            <option value="">Upload media first</option>
           ) : (
-            <img
-              className="media-preview-content"
-              src={selectedPreviewUrl}
-              alt={`Preview of ${selectedMedia.name}`}
-            />
+            readyMedia.map((record) => (
+              <option key={record.id} value={record.id}>
+                {record.name} · {record.kind.toUpperCase()}
+              </option>
+            ))
           )}
+        </select>
+
+        <div className="camera-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void runCameraCommand(() => client.send("camera.detect"))}
+            disabled={cameraBusy || cameraGateBlocked}
+            aria-label="Check WebRTC target"
+          >
+            Check target
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => void runCameraCommand(() => client.send("camera.enable"))}
+            disabled={cameraBusy || !cameraCanEnable}
+            aria-label="Turn camera replacement ON"
+          >
+            Camera ON
+          </button>
+          <button
+            type="button"
+            className="danger-button"
+            onClick={() => void runCameraCommand(() => client.send("camera.disable"))}
+            disabled={cameraBusy || !cameraCanDisable}
+            aria-label="Turn camera replacement OFF and restore track"
+          >
+            Camera OFF
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void runCameraCommand(() => client.send("camera.switchSource", { mediaId: selectedMediaId }))}
+            disabled={cameraBusy || !cameraCanDisable || selectedMediaId === ""}
+            aria-label="Switch camera track source"
+          >
+            Switch
+          </button>
         </div>
 
-        {mediaRecords.length === 0 ? (
-          <div className="empty-media">No media loaded yet. Select local files to begin.</div>
+        {cameraGateBlocked ? (
+          <p className="camera-note is-blocked" role="note">
+            Verification required: Live camera replacement is gated until real Chrome browser verification is performed. No sender track is replaced.
+          </p>
         ) : (
-          <ul className="media-list" aria-label="Loaded media files list">
-            {mediaRecords.map((record) => {
-              const duration = formatDuration(record.duration);
-              const dimensions = record.width !== null && record.height !== null
-                ? `${record.width} × ${record.height}`
-                : "Dimensions pending…";
-              return (
-                <li className="media-card" key={record.id}>
-                  <div className={`media-kind ${record.kind === "video" ? "media-kind-video" : ""}`} aria-hidden="true">
-                    {record.kind === "image" ? "IMG" : "VID"}
-                  </div>
-                  <div className="media-details">
-                    <strong title={record.name}>{record.name}</strong>
-                    <span>{dimensions}{duration === null ? "" : ` · ${duration}`}</span>
-                    <span>{record.mimeType} · {formatBytes(record.size)}</span>
-                    {record.error !== undefined && (
-                      <span className="media-inline-error">{record.error.message}</span>
-                    )}
-                  </div>
-                  <div className={`media-status media-status-${record.status.toLowerCase()}`}>
-                    <span className="status-indicator" aria-hidden="true" />
-                    {record.status}
-                  </div>
-                  <button
-                    className="remove-button"
-                    type="button"
-                    onClick={() => void removeMedia(record.id)}
-                    disabled={removingIds.has(record.id)}
-                    aria-label={`Remove ${record.name}`}
-                    title="Remove media item"
-                  >
-                    {removingIds.has(record.id) ? "…" : "×"}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <p className="camera-note">
+            Replacement occurs only on explicit command for the detected target origin. CapCam does not emulate a hardware camera.
+          </p>
+        )}
+
+        {cameraStatus?.reason !== null && cameraStatus?.reason !== undefined && (
+          <p className="camera-reason" role="status">
+            {humanReadableReason(cameraStatus.reason)}
+          </p>
+        )}
+
+        {cameraError !== null && (
+          <ErrorSurface
+            title="Camera Integration Error"
+            message={cameraError}
+            reason={cameraStatus?.reason}
+            actionLabel="Check Target"
+            onAction={() => void runCameraCommand(() => client.send("camera.detect"))}
+            onDismiss={() => setCameraError(null)}
+          />
         )}
       </section>
 
