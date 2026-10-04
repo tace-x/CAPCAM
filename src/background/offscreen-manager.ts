@@ -36,8 +36,8 @@ interface ExchangeOptions {
   allowSessionRotation?: boolean;
 }
 
-const DEFAULT_REQUEST_TIMEOUT_MS = 8_000;
-const MAX_REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 35_000;
+const MAX_REQUEST_TIMEOUT_MS = 60_000;
 // @types/chrome@0.0.287 predates OFFSCREEN_DOCUMENT in ContextType; Chrome has exposed it since 116.
 const OFFSCREEN_CONTEXT_TYPE = "OFFSCREEN_DOCUMENT" as unknown as chrome.runtime.ContextType;
 const logger = createLogger("Offscreen");

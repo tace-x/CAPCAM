@@ -121,8 +121,8 @@ export class ImageResourceManager implements ImageResourceManagerPort {
 
       try {
         image.src = sourceUrl;
-        if (typeof image.decode === "function") {
-          void image.decode().then(() => finish(), (error: unknown) => finish(imageFailure(error)));
+        if (hasAsyncDecode) {
+          void image.decode?.().then(() => finish(), (error: unknown) => finish(imageFailure(error)));
         } else if (image.complete && image.naturalWidth > 0) {
           finish();
         }
