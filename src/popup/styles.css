@@ -943,8 +943,8 @@ a:focus-visible {
 .camera-status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0 10px;
-  padding: 2px 8px;
+  gap: 4px 12px;
+  padding: 6px 10px;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
   background: var(--bg-surface-inset);
@@ -952,6 +952,21 @@ a:focus-visible {
 
 .camera-status-grid .status-row {
   min-width: 0;
+  min-height: 22px;
+  gap: 6px;
+}
+
+.camera-status-grid .status-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.camera-status-grid .status-value {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .camera-origin {
