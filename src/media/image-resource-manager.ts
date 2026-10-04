@@ -16,6 +16,7 @@ export interface ImageResourceManagerPort {
   load(mediaId: string, sourceUrl: string, signal: AbortSignal, timeoutMs?: number): Promise<ImageResourceInfo>;
   releaseImage(mediaId: string): Promise<void>;
   hasImage(mediaId: string): boolean;
+  getImageElement?(mediaId: string): ImageElementLike | undefined;
 }
 
 function abortError(): MediaEngineError {
@@ -78,6 +79,10 @@ export class ImageResourceManager implements ImageResourceManagerPort {
 
   hasImage(mediaId: string): boolean {
     return this.images.has(mediaId);
+  }
+
+  getImageElement(mediaId: string): ImageElementLike | undefined {
+    return this.images.get(mediaId);
   }
 
   private waitForDecode(image: ImageElementLike, sourceUrl: string, signal: AbortSignal, timeoutMs: number): Promise<void> {

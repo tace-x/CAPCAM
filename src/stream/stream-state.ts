@@ -8,7 +8,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<StreamStatus, readonly StreamStatus[]
   ACTIVE: ["STOPPING", "ERROR"],
   STOPPING: ["STOPPED", "ERROR"],
   STOPPED: ["INITIALIZING", "IDLE"],
-  ERROR: ["IDLE", "INITIALIZING"],
+  ERROR: ["IDLE", "INITIALIZING", "STOPPING", "STOPPED"],
 };
 
 export function canTransitionStreamState(from: StreamStatus, to: StreamStatus): boolean {

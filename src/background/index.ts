@@ -5,6 +5,7 @@ import { SettingsStorage } from "../storage/storage";
 import { CapCamError, toCapCamError } from "../shared/errors";
 import { createLogger } from "../shared/logger";
 import { createErrorResponse, extractRequestId, isEventEnvelope } from "../messaging/protocol";
+import { createEvent } from "../messaging/events";
 import { isTrustedOffscreenEvent } from "./event-relay";
 import { generateRequestId } from "../messaging/commands";
 
@@ -14,7 +15,15 @@ const runtime = new BackgroundRuntime(
   new OffscreenManager(createChromeOffscreenPlatform()),
   new SettingsStorage(),
 );
-const messageRouter = new BackgroundMessageRouter(runtime, extensionId, chrome.runtime.getURL(""));
+runtime.subscribeCameraIntegrationStatus((update) => {
+  void chrome.runtime.sendMessage(createEvent("camera.statusChanged", update)).catch(() => undefined);
+});
+const cameraTestPageUrl = import.meta.env.MODE === "camera-test"
+  ? chrome.runtime.getURL("tests/webrtc/offscreen-bridge.html")
+  : null;
+const messageRouter = new BackgroundMessageRouter(runtime, extensionId, chrome.runtime.getURL(""), {
+  cameraTestPageUrl,
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (isEventEnvelope(message)) {

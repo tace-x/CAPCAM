@@ -1,52 +1,43 @@
-import { CapCamError } from "../shared/errors";
-import { createLogger } from "../shared/logger";
+import type { RuntimeDiagnostics, RuntimePingResponse, RuntimeStateSnapshot } from "../shared/runtime-types";
 import type { OffscreenRuntimeInfo } from "../shared/types";
 import { MediaRuntime } from "./media-runtime";
+import { RuntimeManager, type RuntimeManagerOptions } from "./runtime-manager";
 
-const logger = createLogger("Offscreen");
-
+/** Compatibility facade for callers that still need the coarse offscreen status shape. */
 export class OffscreenRuntime {
-  private info: OffscreenRuntimeInfo = { status: "STARTING", initializedAt: null };
-  private initialization: Promise<OffscreenRuntimeInfo> | null = null;
+  readonly manager: RuntimeManager;
 
-  constructor(private readonly mediaRuntime: MediaRuntime) {}
+  constructor(mediaRuntime: MediaRuntime, options: RuntimeManagerOptions = {}) {
+    this.manager = new RuntimeManager(mediaRuntime, options);
+  }
 
-  initialize(): Promise<OffscreenRuntimeInfo> {
-    if (this.info.status === "READY") return Promise.resolve(this.getStatus());
-    if (this.initialization !== null) return this.initialization;
-
-    this.initialization = Promise.resolve().then(async () => {
-      try {
-        this.info = { status: "STARTING", initializedAt: null };
-        await this.mediaRuntime.initialize();
-        this.info = { status: "READY", initializedAt: Date.now() };
-        logger.info("Offscreen runtime ready.");
-        return this.getStatus();
-      } catch (error) {
-        this.info = { status: "ERROR", initializedAt: null };
-        const message = error instanceof Error ? error.message : "Media runtime initialization failed.";
-        throw new CapCamError("CAPCAM_RUNTIME_ERROR", "Offscreen runtime initialization failed.", { reason: message });
-      }
-    }).finally(() => {
-      this.initialization = null;
-    });
-    return this.initialization;
+  async initialize(): Promise<OffscreenRuntimeInfo> {
+    await this.manager.initialize();
+    return this.getStatus();
   }
 
   getStatus(): OffscreenRuntimeInfo {
-    return { ...this.info };
+    return this.manager.getOffscreenStatus();
   }
 
   async shutdown(): Promise<OffscreenRuntimeInfo> {
-    try {
-      await this.mediaRuntime.shutdown();
-      this.info = { status: "STOPPED", initializedAt: null };
-      logger.info("Offscreen runtime stopped.");
-      return this.getStatus();
-    } catch (error) {
-      this.info = { status: "ERROR", initializedAt: null };
-      const message = error instanceof Error ? error.message : "Media runtime shutdown failed.";
-      throw new CapCamError("CAPCAM_RUNTIME_ERROR", "Offscreen runtime shutdown failed.", { reason: message });
-    }
+    await this.manager.shutdown();
+    return this.getStatus();
+  }
+
+  async reset(): Promise<RuntimeStateSnapshot> {
+    return this.manager.reset();
+  }
+
+  getState(): RuntimeStateSnapshot {
+    return this.manager.getState();
+  }
+
+  getDiagnostics(): RuntimeDiagnostics {
+    return this.manager.getDiagnostics();
+  }
+
+  ping(): RuntimePingResponse {
+    return this.manager.ping();
   }
 }

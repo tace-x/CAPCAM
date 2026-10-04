@@ -12,8 +12,12 @@ export interface VideoElementLike {
   duration: number;
   error: { code: number } | null;
   seekable: { length: number };
+  loop?: boolean;
+  ended?: boolean;
+  currentTime?: number;
   canPlayType(type: string): string;
   load(): void;
+  play?(): Promise<void>;
   pause(): void;
   addEventListener(type: string, listener: EventListener): void;
   removeEventListener(type: string, listener: EventListener): void;
@@ -24,6 +28,9 @@ export interface VideoResourceManagerPort {
   load(mediaId: string, sourceUrl: string, mimeType: string, signal: AbortSignal, timeoutMs?: number): Promise<VideoResourceInfo>;
   releaseVideo(mediaId: string): Promise<void>;
   hasVideo(mediaId: string): boolean;
+  getVideoElement?(mediaId: string): VideoElementLike | undefined;
+  playVideo?(mediaId: string): Promise<void>;
+  pauseVideo?(mediaId: string): Promise<void>;
 }
 
 function abortError(): MediaEngineError {
@@ -110,6 +117,41 @@ export class VideoResourceManager implements VideoResourceManagerPort {
 
   hasVideo(mediaId: string): boolean {
     return this.videos.has(mediaId);
+  }
+
+  getVideoElement(mediaId: string): VideoElementLike | undefined {
+    return this.videos.get(mediaId);
+  }
+
+  async playVideo(mediaId: string): Promise<void> {
+    const video = this.videos.get(mediaId);
+    if (video === undefined) throw new MediaEngineError("MEDIA_NOT_FOUND", undefined, { mediaId });
+    if (video.play === undefined) throw new MediaEngineError("MEDIA_RESOURCE_FAILED", "This video resource cannot be played in the current context.", { mediaId });
+    video.muted = true;
+    video.playsInline = true;
+    if (video.loop !== undefined) video.loop = true;
+    if (video.ended === true && typeof video.currentTime === "number") video.currentTime = 0;
+    try {
+      await video.play();
+    } catch (error) {
+      throw new MediaEngineError("MEDIA_RESOURCE_FAILED", "The local video could not be started for canvas rendering.", {
+        mediaId,
+        reason: error instanceof Error ? error.message : "HTMLVideoElement.play() failed.",
+      });
+    }
+  }
+
+  async pauseVideo(mediaId: string): Promise<void> {
+    const video = this.videos.get(mediaId);
+    if (video === undefined) return;
+    try {
+      video.pause();
+    } catch (error) {
+      throw new MediaEngineError("MEDIA_RESOURCE_FAILED", "The local video could not be paused cleanly.", {
+        mediaId,
+        reason: error instanceof Error ? error.message : "HTMLVideoElement.pause() failed.",
+      });
+    }
   }
 
   private waitForMetadata(video: VideoElementLike, sourceUrl: string, signal: AbortSignal, timeoutMs: number): Promise<void> {

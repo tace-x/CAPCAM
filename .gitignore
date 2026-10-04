@@ -8,3 +8,6 @@ artifacts/
 .DS_Store
 .env
 .env.*
+release/
+dist-release/
+scratch/

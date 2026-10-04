@@ -6,6 +6,7 @@ import {
   createErrorResponse,
   createSuccessResponse,
   isEventEnvelope,
+  isResponseData,
   isResponseEnvelope,
   validateCommand,
 } from "../../src/messaging/protocol";
@@ -39,6 +40,31 @@ describe("internal messaging protocol", () => {
     expect(isResponseEnvelope({ ...failure, requestId: "" })).toBe(false);
   });
 
+  it("validates revisioned camera status handoffs and scoped source-switch commands", () => {
+    const update = {
+      revision: 4,
+      changedAt: 1730000000000,
+      status: {
+        state: "BLOCKED_PHASE_06_VERIFICATION",
+        origin: null,
+        supported: false,
+        permission: "unavailable",
+        capcamActive: false,
+        originalTrackAvailable: false,
+        activeTrackAvailable: false,
+        reason: "BLOCKED_PHASE_06_VERIFICATION",
+      },
+    } as const;
+    const event = createEvent("camera.statusChanged", update);
+    expect(validateCommand(createCommand("camera.switchSource", { mediaId: "med_12345678" })).ok).toBe(true);
+    expect(validateCommand({ ...createCommand("camera.switchSource", { mediaId: "med_12345678" }), payload: { mediaId: "bad-id" } }).ok).toBe(false);
+    expect(isResponseData("camera.getStatus", update)).toBe(true);
+    expect(isResponseData("camera.enable", update)).toBe(true);
+    expect(isEventEnvelope(event)).toBe(true);
+    expect(isEventEnvelope(createEvent("camera.statusChanged", { ...update, changedAt: Number.NaN }))).toBe(false);
+    expect(isResponseData("camera.enable", { ...update, status: { ...update.status, activeTrackAvailable: "yes" } })).toBe(false);
+  });
+
   it("validates typed events and returns a structured error for unhandled commands", async () => {
     const event = createEvent("settings.changed", { ...DEFAULT_SETTINGS });
     expect(isEventEnvelope(event)).toBe(true);
@@ -47,6 +73,6 @@ describe("internal messaging protocol", () => {
     const response = await new CommandRouter().handle(createCommand("runtime.getStatus"));
     expect(isResponseEnvelope(response)).toBe(true);
     expect(response.success).toBe(false);
-    if (!response.success) expect(response.error?.code).toBe("CAPCAM_PROTOCOL_ERROR");
+    if (!response.success) expect(response.error?.code).toBe("UNKNOWN_COMMAND");
   });
 });

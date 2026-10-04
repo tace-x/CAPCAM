@@ -3,6 +3,12 @@ import { CapCamError, isCapCamErrorCode, toErrorDetail, type CapCamErrorCode } f
 import type { CapCamState, OffscreenRuntimeInfo, OffscreenStatus, RuntimeStatus, StreamStatus } from "../shared/types";
 import { isCapCamSettings, isSettingsPatch } from "../storage/settings";
 import { isMediaErrorInfo, isMediaId, isMediaRecord, isTransferId } from "../media/media-validation";
+import { isValidRenderConfig } from "../canvas/render-types";
+import { isStreamId, isStreamInfo, isStreamTrackInfo } from "../stream/stream-types";
+import { isPlaybackId, isPlaybackRecord } from "../playback/playback-types";
+import { PLAYBACK_EVENT_TYPES, type PlaybackEventType } from "../playback/playback-events";
+import { isRuntimeDiagnostics, isRuntimePingResponse, isRuntimeSessionId, isRuntimeStateSnapshot } from "../shared/runtime-types";
+import { isCameraIntegrationStatusUpdate } from "../camera-integration/handoff";
 import type { CommandEnvelope, CommandType } from "./commands";
 import type { EventEnvelope, EventType } from "./events";
 
@@ -16,6 +22,7 @@ export interface ResponseEnvelope<T = unknown> {
   protocol: typeof PROTOCOL_VERSION;
   requestId: string;
   success: boolean;
+  runtimeSessionId?: string;
   data?: T;
   error?: ResponseError;
 }
@@ -30,6 +37,12 @@ const OFFSCREEN_STATUSES: readonly OffscreenStatus[] = ["STARTING", "READY", "ST
 const STREAM_STATUSES: readonly StreamStatus[] = ["IDLE", "INITIALIZING", "READY", "ACTIVE", "STOPPING", "STOPPED", "ERROR"];
 const COMMAND_TYPES: readonly CommandType[] = [
   "runtime.getStatus",
+  "runtime.initialize",
+  "runtime.shutdown",
+  "runtime.reset",
+  "runtime.getState",
+  "runtime.getDiagnostics",
+  "runtime.ping",
   "offscreen.initialize",
   "offscreen.getStatus",
   "offscreen.shutdown",
@@ -41,9 +54,33 @@ const COMMAND_TYPES: readonly CommandType[] = [
   "media.remove",
   "media.clear",
   "media.inspect",
+  "stream.create",
+  "stream.getState",
+  "stream.start",
+  "stream.stop",
+  "stream.restart",
+  "stream.switchSource",
+  "stream.getTrackInfo",
+  "stream.dispose",
+  "playback.load",
+  "playback.play",
+  "playback.pause",
+  "playback.stop",
+  "playback.restart",
+  "playback.seek",
+  "playback.setLoop",
+  "playback.setRate",
+  "playback.getState",
+  "playback.dispose",
+  "camera.getStatus",
+  "camera.detect",
+  "camera.enable",
+  "camera.disable",
+  "camera.switchSource",
 ];
 const EVENT_TYPES: readonly EventType[] = [
   "runtime.stateChanged",
+  "runtime.lifecycleChanged",
   "offscreen.statusChanged",
   "settings.changed",
   "media.registered",
@@ -52,6 +89,9 @@ const EVENT_TYPES: readonly EventType[] = [
   "media.failed",
   "media.removed",
   "media.released",
+  "stream.stateChanged",
+  "camera.statusChanged",
+  ...PLAYBACK_EVENT_TYPES,
 ];
 
 export function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -101,12 +141,20 @@ export function validateCommand(value: unknown): CommandValidationResult {
   const type = value.type as CommandType;
   const payloadCommands: readonly CommandType[] = [
     "settings.update", "media.register", "media.get", "media.remove", "media.inspect",
+    "stream.create", "stream.start", "stream.stop", "stream.restart", "stream.switchSource",
+    "stream.getTrackInfo", "stream.dispose",
+    "playback.load", "playback.play", "playback.pause", "playback.stop", "playback.restart",
+    "playback.seek", "playback.setLoop", "playback.setRate", "playback.dispose",
+    "camera.switchSource",
   ];
   const allowedKeys = payloadCommands.includes(type)
-    ? ["protocol", "requestId", "type", "payload"]
-    : ["protocol", "requestId", "type"];
+    ? ["protocol", "requestId", "type", "payload", "runtimeSessionId"]
+    : ["protocol", "requestId", "type", "runtimeSessionId"];
   if (Object.keys(value).some((key) => !allowedKeys.includes(key))) {
     return { ok: false, requestId, error: makeProtocolError("Command envelope contains unsupported fields.") };
+  }
+  if (Object.hasOwn(value, "runtimeSessionId") && !isRuntimeSessionId(value.runtimeSessionId)) {
+    return { ok: false, requestId, error: makeProtocolError("Runtime session ID is invalid.") };
   }
 
   const payload = value.payload;
@@ -121,7 +169,49 @@ export function validateCommand(value: unknown): CommandValidationResult {
     case "media.get":
     case "media.remove":
     case "media.inspect":
+    case "camera.switchSource":
       validPayload = isPlainRecord(payload) && Object.keys(payload).length === 1 && isMediaId(payload.mediaId);
+      break;
+    case "stream.create":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 2 &&
+        isMediaId(payload.mediaId) && isValidRenderConfig(payload.config);
+      break;
+    case "stream.start":
+    case "stream.stop":
+    case "stream.restart":
+    case "stream.getTrackInfo":
+    case "stream.dispose":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 1 && isStreamId(payload.streamId);
+      break;
+    case "stream.switchSource":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 2 &&
+        isStreamId(payload.streamId) && isMediaId(payload.mediaId);
+      break;
+    case "playback.load":
+      validPayload = isPlainRecord(payload) &&
+        (Object.keys(payload).length === 1 || Object.keys(payload).length === 2) &&
+        isMediaId(payload.mediaId) &&
+        (!Object.hasOwn(payload, "imageDurationSeconds") || typeof payload.imageDurationSeconds === "number") &&
+        Object.keys(payload).every((key) => ["mediaId", "imageDurationSeconds"].includes(key));
+      break;
+    case "playback.play":
+    case "playback.pause":
+    case "playback.stop":
+    case "playback.restart":
+    case "playback.dispose":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 1 && isPlaybackId(payload.playbackId);
+      break;
+    case "playback.seek":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 2 &&
+        isPlaybackId(payload.playbackId) && typeof payload.time === "number";
+      break;
+    case "playback.setLoop":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 2 &&
+        isPlaybackId(payload.playbackId) && typeof payload.enabled === "boolean";
+      break;
+    case "playback.setRate":
+      validPayload = isPlainRecord(payload) && Object.keys(payload).length === 2 &&
+        isPlaybackId(payload.playbackId) && typeof payload.rate === "number";
       break;
     default:
       validPayload = !Object.hasOwn(value, "payload");
@@ -133,12 +223,24 @@ export function validateCommand(value: unknown): CommandValidationResult {
   return { ok: true, command: value as unknown as CommandEnvelope };
 }
 
-export function createSuccessResponse<T>(requestId: string, data: T): ResponseEnvelope<T> {
-  return { protocol: PROTOCOL_VERSION, requestId, success: true, data };
+export function createSuccessResponse<T>(requestId: string, data: T, runtimeSessionId?: string): ResponseEnvelope<T> {
+  return {
+    protocol: PROTOCOL_VERSION,
+    requestId,
+    success: true,
+    ...(runtimeSessionId === undefined ? {} : { runtimeSessionId }),
+    data,
+  };
 }
 
-export function createErrorResponse(requestId: string, error: CapCamError): ResponseEnvelope<never> {
-  return { protocol: PROTOCOL_VERSION, requestId, success: false, error: toErrorDetail(error) };
+export function createErrorResponse(requestId: string, error: CapCamError, runtimeSessionId?: string): ResponseEnvelope<never> {
+  return {
+    protocol: PROTOCOL_VERSION,
+    requestId,
+    success: false,
+    ...(runtimeSessionId === undefined ? {} : { runtimeSessionId }),
+    error: toErrorDetail(error),
+  };
 }
 
 function isResponseError(value: unknown): value is ResponseError {
@@ -150,13 +252,15 @@ function isResponseError(value: unknown): value is ResponseError {
 
 export function isResponseEnvelope(value: unknown): value is ResponseEnvelope {
   if (!isPlainRecord(value) || value.protocol !== PROTOCOL_VERSION || !isRequestId(value.requestId)) return false;
+  const validSession = !Object.hasOwn(value, "runtimeSessionId") || isRuntimeSessionId(value.runtimeSessionId);
+  if (!validSession) return false;
   if (value.success === true) {
     return Object.hasOwn(value, "data") && !Object.hasOwn(value, "error") &&
-      Object.keys(value).every((key) => ["protocol", "requestId", "success", "data"].includes(key));
+      Object.keys(value).every((key) => ["protocol", "requestId", "success", "runtimeSessionId", "data"].includes(key));
   }
   if (value.success === false) {
     return Object.hasOwn(value, "error") && !Object.hasOwn(value, "data") && isResponseError(value.error) &&
-      Object.keys(value).every((key) => ["protocol", "requestId", "success", "error"].includes(key));
+      Object.keys(value).every((key) => ["protocol", "requestId", "success", "runtimeSessionId", "error"].includes(key));
   }
   return false;
 }
@@ -189,6 +293,15 @@ export function isResponseData(type: CommandType, value: unknown): boolean {
   switch (type) {
     case "runtime.getStatus":
       return isCapCamState(value);
+    case "runtime.initialize":
+    case "runtime.shutdown":
+    case "runtime.reset":
+    case "runtime.getState":
+      return isRuntimeStateSnapshot(value);
+    case "runtime.getDiagnostics":
+      return isRuntimeDiagnostics(value);
+    case "runtime.ping":
+      return isRuntimePingResponse(value);
     case "offscreen.initialize":
     case "offscreen.getStatus":
     case "offscreen.shutdown":
@@ -206,6 +319,35 @@ export function isResponseData(type: CommandType, value: unknown): boolean {
     case "media.clear":
       return isPlainRecord(value) && Object.keys(value).length === 1 &&
         typeof value.removed === "number" && Number.isInteger(value.removed) && value.removed >= 0;
+    case "stream.create":
+    case "stream.getState":
+    case "stream.start":
+    case "stream.stop":
+    case "stream.restart":
+    case "stream.switchSource":
+    case "stream.dispose":
+      return isStreamInfo(value);
+    case "stream.getTrackInfo":
+      return isStreamTrackInfo(value);
+    case "playback.load":
+    case "playback.play":
+    case "playback.pause":
+    case "playback.stop":
+    case "playback.restart":
+    case "playback.seek":
+    case "playback.setLoop":
+    case "playback.setRate":
+      return isPlaybackRecord(value);
+    case "playback.getState":
+    case "playback.dispose":
+      return value === null || isPlaybackRecord(value);
+    case "camera.getStatus":
+      return isCameraIntegrationStatusUpdate(value);
+    case "camera.detect":
+    case "camera.enable":
+    case "camera.disable":
+    case "camera.switchSource":
+      return isCameraIntegrationStatusUpdate(value);
     default:
       return false;
   }
@@ -215,6 +357,8 @@ function isEventPayload(type: EventType, value: unknown): boolean {
   switch (type) {
     case "runtime.stateChanged":
       return isCapCamState(value);
+    case "runtime.lifecycleChanged":
+      return isRuntimeStateSnapshot(value);
     case "offscreen.statusChanged":
       return isOffscreenRuntimeInfo(value);
     case "settings.changed":
@@ -237,8 +381,17 @@ function isEventPayload(type: EventType, value: unknown): boolean {
         value.record.status === "ERROR" && isMediaErrorInfo(value.error) && Object.keys(value).length === 3;
     case "media.removed":
       return isPlainRecord(value) && isMediaId(value.mediaId) && Object.keys(value).length === 1;
+    case "stream.stateChanged":
+      return isStreamInfo(value);
+    case "camera.statusChanged":
+      return isCameraIntegrationStatusUpdate(value);
     default:
-      return false;
+      if (!PLAYBACK_EVENT_TYPES.includes(type as PlaybackEventType) || !isPlainRecord(value)) return false;
+      return isPlaybackId(value.playbackId) && isMediaId(value.mediaId) &&
+        typeof value.timestamp === "number" && Number.isFinite(value.timestamp) &&
+        isPlaybackRecord(value.record) && value.record.playbackId === value.playbackId &&
+        value.record.mediaId === value.mediaId && Object.keys(value).length === 4 &&
+        Object.keys(value).every((key) => ["playbackId", "mediaId", "timestamp", "record"].includes(key));
   }
 }
 

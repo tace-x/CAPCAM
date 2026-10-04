@@ -78,8 +78,12 @@ class FakeObjectUrlApi implements ObjectUrlApi {
 
 class FakeOffscreenPlatform implements OffscreenPlatform {
   exists = false;
+  readonly sentMessages: unknown[] = [];
 
-  constructor(private readonly router: CommandRouter) {}
+  constructor(
+    private readonly router: CommandRouter,
+    private readonly initializeRuntime: () => Promise<unknown>,
+  ) {}
 
   async hasDocument(): Promise<boolean> {
     return this.exists;
@@ -87,6 +91,7 @@ class FakeOffscreenPlatform implements OffscreenPlatform {
 
   async createDocument(): Promise<void> {
     this.exists = true;
+    await this.initializeRuntime();
   }
 
   async closeDocument(): Promise<void> {
@@ -94,6 +99,7 @@ class FakeOffscreenPlatform implements OffscreenPlatform {
   }
 
   sendMessage(message: unknown): Promise<unknown> {
+    this.sentMessages.push(message);
     return this.router.handle(message);
   }
 }
@@ -122,18 +128,26 @@ describe("popup → service worker → offscreen media commands", () => {
     });
     const mediaRuntime = new MediaRuntime(engine);
     const offscreenRuntime = new OffscreenRuntime(mediaRuntime);
-    const offscreenRouter = new CommandRouter();
-    offscreenRouter.register("offscreen.initialize", () => offscreenRuntime.initialize());
-    offscreenRouter.register("offscreen.getStatus", () => offscreenRuntime.getStatus());
-    offscreenRouter.register("offscreen.shutdown", () => offscreenRuntime.shutdown());
-    offscreenRouter.register("media.register", (payload) => mediaRuntime.register(payload));
-    offscreenRouter.register("media.get", (payload) => mediaRuntime.get(payload));
-    offscreenRouter.register("media.list", () => mediaRuntime.list());
-    offscreenRouter.register("media.remove", (payload) => mediaRuntime.remove(payload));
-    offscreenRouter.register("media.clear", () => mediaRuntime.clear());
-    offscreenRouter.register("media.inspect", (payload) => mediaRuntime.inspect(payload));
+    const runtimeManager = offscreenRuntime.manager;
+    const offscreenRouter = new CommandRouter({
+      authorize: (command) => runtimeManager.authorizeCommand(command.type, command.runtimeSessionId),
+      getRuntimeSessionId: () => runtimeManager.getState().runtimeSessionId,
+    });
+    offscreenRouter.register("runtime.initialize", () => runtimeManager.initialize());
+    offscreenRouter.register("runtime.shutdown", () => runtimeManager.shutdown());
+    offscreenRouter.register("runtime.reset", () => runtimeManager.reset());
+    offscreenRouter.register("runtime.getState", () => runtimeManager.getState());
+    offscreenRouter.register("runtime.getDiagnostics", () => runtimeManager.getDiagnostics());
+    offscreenRouter.register("runtime.ping", () => runtimeManager.ping());
+    offscreenRouter.register("media.register", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.register(payload)));
+    offscreenRouter.register("media.get", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.get(payload)));
+    offscreenRouter.register("media.list", () => runtimeManager.runSubsystemOperation(() => mediaRuntime.list()));
+    offscreenRouter.register("media.remove", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.remove(payload)));
+    offscreenRouter.register("media.clear", () => runtimeManager.runSubsystemOperation(() => mediaRuntime.clear()));
+    offscreenRouter.register("media.inspect", (payload) => runtimeManager.runSubsystemOperation(() => mediaRuntime.inspect(payload)));
 
-    const offscreenManager = new OffscreenManager(new FakeOffscreenPlatform(offscreenRouter));
+    const platform = new FakeOffscreenPlatform(offscreenRouter, () => runtimeManager.initialize());
+    const offscreenManager = new OffscreenManager(platform);
     const backgroundRuntime = new BackgroundRuntime(offscreenManager, new FakeSettings());
     const backgroundRouter = new BackgroundMessageRouter(
       backgroundRuntime,
@@ -149,6 +163,11 @@ describe("popup → service worker → offscreen media commands", () => {
     const ingestClient = new MediaIngestClient(client, transferStore);
 
     const first = await ingestClient.ingest(createPngFile(16, 9, "first.png"));
+    const registration = platform.sentMessages.find((message) =>
+      typeof message === "object" && message !== null && "type" in message && message.type === "media.register",
+    );
+    expect(registration).toMatchObject({ type: "media.register", payload: { transferId: expect.any(String) } });
+    expect((registration as { payload: Record<string, unknown> }).payload).not.toHaveProperty("file");
     expect(first.status).toBe("READY");
     expect(first.aspectRatio).toBeCloseTo(16 / 9);
     expect(imageResources.loaded).toEqual([first.id]);

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>CapCam · Stream transfer receiver</title>
+  </head>
+  <body data-test-page="transfer-receiver" class="receiver-page">
+    <main class="receiver-shell">
+      <p class="eyebrow">PAGE-WORLD RECEIVER</p>
+      <h2>Iframe track receiver</h2>
+      <video id="receiver-preview" class="video" autoplay playsinline muted></video>
+      <pre id="receiver-info" class="output">Waiting for a MediaStream message from the parent page.</pre>
+    </main>
+    <script type="module" src="./test.ts"></script>
+  </body>
+</html>

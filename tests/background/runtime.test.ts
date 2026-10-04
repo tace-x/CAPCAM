@@ -4,6 +4,7 @@ import type { CommandArguments, CommandResult } from "../../src/messaging/comman
 import { BackgroundRuntime } from "../../src/background/runtime";
 import type { OffscreenRuntimeInfo } from "../../src/shared/types";
 import { DEFAULT_SETTINGS, type CapCamSettings } from "../../src/storage/settings";
+import type { StreamInfo } from "../../src/stream/stream-types";
 
 class FakeOffscreenService implements OffscreenService {
   private info: OffscreenRuntimeInfo = { status: "STOPPED", initializedAt: null };
@@ -24,8 +25,21 @@ class FakeOffscreenService implements OffscreenService {
     return { ...this.info };
   }
 
-  async execute<T extends MediaCommandType>(_type: T, ..._args: CommandArguments<T>): Promise<CommandResult<T>> {
-    throw new Error("Unexpected media command in this runtime lifecycle test.");
+  async execute<T extends MediaCommandType>(type: T, ..._args: CommandArguments<T>): Promise<CommandResult<T>> {
+    if (type === "stream.getState") {
+      const info: StreamInfo = {
+        streamId: null,
+        sourceMediaId: null,
+        state: "IDLE",
+        config: null,
+        track: null,
+        error: null,
+        disposed: false,
+        changedAt: Date.now(),
+      };
+      return info as CommandResult<T>;
+    }
+    throw new Error("Unexpected offscreen command in this runtime lifecycle test.");
   }
 }
 

@@ -1,3 +1,5 @@
+export const PHASE_06_VERIFIED = false;
+
 export interface CapCamCapabilities {
   manifestV3: boolean;
   extensionStorage: boolean;

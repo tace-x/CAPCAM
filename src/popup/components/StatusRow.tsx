@@ -1,19 +1,18 @@
-import type { RuntimeStatus, OffscreenStatus } from "../../shared/types";
-
-type DisplayStatus = RuntimeStatus | OffscreenStatus | "UNKNOWN";
-
-interface StatusRowProps {
+export interface StatusRowProps {
   label: string;
-  status: DisplayStatus;
+  status: string;
+  detail?: string;
 }
 
-export function StatusRow({ label, status }: StatusRowProps) {
+export function StatusRow({ label, status, detail }: StatusRowProps) {
+  const normalizedStatus = status.toLowerCase();
+
   return (
     <div className="status-row">
       <span className="status-label">{label}</span>
-      <span className={`status-value status-${status.toLowerCase()}`}>
+      <span className={`status-value status-${normalizedStatus}`} title={detail ?? status}>
         <span className="status-indicator" aria-hidden="true" />
-        {status}
+        <span className="status-text">{status}</span>
       </span>
     </div>
   );

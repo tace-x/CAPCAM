@@ -7,10 +7,13 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build && node scripts/copy-extension-assets.mjs",
+    "build:camera-test": "vite build --mode camera-test && node scripts/copy-extension-assets.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src tests vite.config.ts vitest.config.ts --max-warnings=0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:release": "node scripts/verify-release.mjs",
+    "package": "node scripts/package-release.mjs"
   },
   "dependencies": {
     "react": "^19.1.1",
@@ -25,6 +28,7 @@
     "@typescript-eslint/parser": "^8.71.0",
     "@vitejs/plugin-react": "^5.0.4",
     "eslint": "^10.11.0",
+    "puppeteer-core": "^25.12.0",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",
     "vitest": "^4.1.11"

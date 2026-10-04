@@ -60,6 +60,10 @@ class FakeVideo implements VideoElementLike {
   seekable = { length: 1 };
   loadCalls = 0;
   pauseCalls = 0;
+  playCalls = 0;
+  loop = false;
+  ended = false;
+  currentTime = 0;
   private readonly listeners = new Map<string, Set<EventListener>>();
 
   canPlayType(): string {
@@ -72,6 +76,10 @@ class FakeVideo implements VideoElementLike {
       this.readyState = 1;
       queueMicrotask(() => this.dispatch("loadedmetadata"));
     }
+  }
+
+  async play(): Promise<void> {
+    this.playCalls += 1;
   }
 
   pause(): void {
@@ -107,7 +115,9 @@ describe("image and video resource managers", () => {
     expect(result).toEqual({ width: 640, height: 480 });
     expect(image.src).toBe("blob:test/image");
     expect(manager.hasImage("med_image0001")).toBe(true);
+    expect(manager.getImageElement("med_image0001")).toBe(image);
     await manager.releaseImage("med_image0001");
+    expect(manager.getImageElement("med_image0001")).toBeUndefined();
     expect(image.removed).toBe(true);
     expect(manager.hasImage("med_image0001")).toBe(false);
   });
@@ -145,8 +155,17 @@ describe("image and video resource managers", () => {
     expect(video.muted).toBe(true);
     expect(video.playsInline).toBe(true);
     expect(manager.hasVideo("med_video0001")).toBe(true);
-    await manager.releaseVideo("med_video0001");
+    expect(manager.getVideoElement("med_video0001")).toBe(video);
+    video.ended = true;
+    video.currentTime = 2;
+    await manager.playVideo("med_video0001");
+    expect(video.playCalls).toBe(1);
+    expect(video.currentTime).toBe(0);
+    expect(video.loop).toBe(true);
+    await manager.pauseVideo("med_video0001");
     expect(video.pauseCalls).toBe(1);
+    await manager.releaseVideo("med_video0001");
+    expect(video.pauseCalls).toBe(2);
     expect(video.src).toBe("");
     expect(manager.hasVideo("med_video0001")).toBe(false);
   });

@@ -1,4 +1,4 @@
-export type LogScope = "Runtime" | "Offscreen" | "Protocol" | "Storage" | "Stream" | "Media" | "Site";
+export type LogScope = "Runtime" | "Offscreen" | "Protocol" | "Storage" | "Stream" | "Playback" | "Media" | "Site";
 export type LogMethod = "debug" | "info" | "warn" | "error";
 
 export interface Logger {

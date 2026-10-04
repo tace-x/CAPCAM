@@ -15,6 +15,8 @@ import { CAPCAM_MAX_MEDIA_SIZE_BYTES, IMAGE_LOAD_TIMEOUT_MS, MAX_CONCURRENT_MEDI
 import { IndexedDbMediaTransferStore, type MediaTransferStore } from "./media-transfer-store";
 import type { ImageResourceInfo, MediaClearResult, MediaKind, MediaRecord, MediaStatus, VideoResourceInfo } from "./media-types";
 import { isTransferId } from "./media-validation";
+import { StreamEngineError } from "../stream/stream-errors";
+import type { RenderableMediaSource } from "../canvas/render-types";
 
 const logger = createLogger("Media");
 
@@ -185,8 +187,59 @@ export class MediaEngine {
     return this.registry.list();
   }
 
+  isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  getActiveLoadCount(): number {
+    return this.activeLoads;
+  }
+
   inspect(mediaId: string): MediaRecord {
     return this.get(mediaId);
+  }
+
+  getRenderableSource(mediaId: string): RenderableMediaSource {
+    let record: MediaRecord;
+    try {
+      record = this.get(mediaId);
+    } catch (error) {
+      throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The selected local media item is not registered.", {
+        mediaId,
+        reason: error instanceof Error ? error.message : "Media lookup failed.",
+      });
+    }
+    if (record.status !== "READY" && record.status !== "IN_USE") {
+      throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The selected local media item is not ready for rendering.", {
+        mediaId,
+        status: record.status,
+      });
+    }
+    if (record.width === null || record.height === null) {
+      throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The selected media has no decoded dimensions.", { mediaId });
+    }
+
+    if (record.kind === "image") {
+      const image = this.imageResources.getImageElement?.(mediaId);
+      if (image === undefined) throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The decoded image element is unavailable.", { mediaId });
+      return { mediaId, kind: "image", width: record.width, height: record.height, element: image as unknown as HTMLImageElement };
+    }
+
+    const video = this.videoResources.getVideoElement?.(mediaId);
+    if (video === undefined) throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The decoded video element is unavailable.", { mediaId });
+    return { mediaId, kind: "video", width: record.width, height: record.height, element: video as unknown as HTMLVideoElement };
+  }
+
+  async playVideo(mediaId: string): Promise<void> {
+    const record = this.get(mediaId);
+    if (record.kind !== "video" || this.videoResources.playVideo === undefined) {
+      throw new StreamEngineError("STREAM_SOURCE_UNAVAILABLE", "The selected media item cannot be played as a video.", { mediaId });
+    }
+    await this.videoResources.playVideo(mediaId);
+  }
+
+  async pauseVideo(mediaId: string): Promise<void> {
+    if (this.videoResources.pauseVideo !== undefined) await this.videoResources.pauseVideo(mediaId);
   }
 
   has(mediaId: string): boolean {
